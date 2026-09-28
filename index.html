@@ -1,0 +1,1755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --paper: #F3F0E8;
+    --paper-raised: #FFFDF8;
+    --ink: #1F2A24;
+    --ink-soft: #5B6459;
+    --line: #D8D2C2;
+    --gold: #B8863B;
+    --gold-soft: #E7D5AE;
+    --green-deep: #22392F;
+    --danger: #A24A3B;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171D1A;
+      --paper-raised: #202823;
+      --ink: #EDE8DC;
+      --ink-soft: #A6ADA2;
+      --line: #34403A;
+      --gold: #D6A758;
+      --gold-soft: #4A3D25;
+      --green-deep: #DDE7DE;
+      --danger: #D98C79;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171D1A;
+    --paper-raised: #202823;
+    --ink: #EDE8DC;
+    --ink-soft: #A6ADA2;
+    --line: #34403A;
+    --gold: #D6A758;
+    --gold-soft: #4A3D25;
+    --green-deep: #DDE7DE;
+    --danger: #D98C79;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 20px 120px;
+  }
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-optical-sizing: auto;
+    font-size: 30px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    margin: 4px 0 20px;
+  }
+  .totals {
+    display: flex;
+    gap: 24px;
+    padding: 16px 18px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 18px;
+  }
+  .totals .item .num {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .totals .item .lbl {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 18px;
+  }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    font-size: 11.5px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+    white-space: nowrap;
+  }
+  .chip.active {
+    background: var(--green-deep);
+    border-color: var(--green-deep);
+    color: var(--paper);
+  }
+  .goal-list { display: flex; flex-direction: column; gap: 14px; }
+  .goal {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+    position: relative;
+  }
+  .goal.done { border-color: var(--gold); }
+  .goal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .goal-name {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .goal-head-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .badge-category {
+    display: inline-block;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .goal-amounts {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .goal-amounts .saved { color: var(--ink); font-weight: 500; }
+  .bar-track {
+    height: 8px;
+    background: var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 5px;
+    transition: width .4s ease;
+  }
+  .goal.done .bar-fill { background: var(--green-deep); }
+  .suggestion-line {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .suggestion-line.overdue { color: var(--danger); }
+  .goal-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .pct { font-size: 11.5px; color: var(--ink-soft); }
+  .goal-actions { display: flex; gap: 8px; align-items: center; }
+  button {
+    font-family: 'IBM Plex Mono', monospace;
+    cursor: pointer;
+    border: none;
+    background: none;
+  }
+  .btn-small {
+    font-size: 11.5px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .btn-small:active { transform: scale(0.97); }
+  .btn-icon {
+    font-size: 13px;
+    padding: 6px 8px;
+    color: var(--ink-soft);
+    border-radius: 6px;
+  }
+  .btn-icon:disabled { opacity: 0.25; }
+  .btn-icon:hover:not(:disabled) { background: var(--paper); }
+  .add-goal-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 10px;
+    border: 1.5px dashed var(--line);
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    background: transparent;
+  }
+  .add-goal-btn:active { background: var(--paper-raised); }
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-soft);
+  }
+  .empty .big { font-family: 'Fraunces', serif; font-size: 20px; color: var(--ink); margin-bottom: 6px; }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(20, 24, 20, 0.45);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 50;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .overlay.open { opacity: 1; pointer-events: auto; }
+  .sheet {
+    background: var(--paper-raised);
+    width: 100%; max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 22px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(20px);
+    transition: transform .25s ease;
+  }
+  .overlay.open .sheet { transform: translateY(0); }
+  .sheet h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0 0 16px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+  }
+  .field input:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+  }
+  .field-hint {
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    margin-top: 5px;
+  }
+  .sheet-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .btn-primary {
+    flex: 1;
+    padding: 13px;
+    border-radius: 8px;
+    background: var(--green-deep);
+    color: var(--paper);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-primary:active { opacity: 0.85; }
+  .btn-cancel {
+    padding: 13px 16px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .btn-danger-text { color: var(--danger); }
+  .toast {
+    position: fixed;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--green-deep);
+    color: var(--paper);
+    padding: 10px 18px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+    z-index: 60;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-main .amt { font-size: 15px; font-weight: 500; }
+  .history-main .amt.negative { color: var(--danger); }
+  .history-main .meta { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .history-empty { text-align: center; color: var(--ink-soft); padding: 30px 0; font-size: 13px; }
+
+  /* Navigation */
+  .tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 40;
+    background: var(--paper-raised);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tabbar-inner {
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+  }
+  .tab {
+    flex: 1;
+    position: relative;
+    text-align: center;
+    padding: 14px 0 15px;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    text-decoration: none;
+  }
+  .tab.active { color: var(--ink); font-weight: 600; }
+  .tab.active::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 32%; right: 32%;
+    height: 2px;
+    background: var(--gold);
+    border-radius: 2px;
+  }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* Bills */
+  .field select {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+  }
+  .field select:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .bill-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .bill-due { font-size: 11.5px; color: var(--ink-soft); }
+  .bill-amount { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 500; white-space: nowrap; }
+  .goal.soon { border-color: var(--gold); }
+  .goal.soon .bill-due { color: var(--gold); font-weight: 500; }
+  .goal.past { opacity: 0.6; }
+  .goal.overdue { border-color: var(--danger); }
+  .goal.overdue .bill-due { color: var(--danger); font-weight: 500; }
+  .bill-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+  /* Overview */
+  .statement {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 4px 18px;
+    margin-bottom: 18px;
+  }
+  .statement-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .statement-row:last-child { border-bottom: none; }
+  .statement-row .amt { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 500; white-space: nowrap; }
+  .statement-row.total { font-weight: 600; }
+  .statement-row.total .amt { font-size: 21px; }
+  .statement-row .amt.negative, .statement-row .when.overdue { color: var(--danger); }
+  .statement-row .meta { display: block; font-size: 11px; color: var(--ink-soft); font-weight: 400; margin-top: 2px; }
+  .statement-row .row-end { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .statement-empty { padding: 16px 0; font-size: 12.5px; color: var(--ink-soft); text-align: center; }
+  .section-title {
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    font-weight: 500;
+    margin: 26px 0 10px;
+  }
+  .month-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 13px;
+    padding: 14px 0 10px;
+  }
+  .month-head .amt { color: var(--ink-soft); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="authScreen" style="display:none; max-width: 380px; padding-top: 80px;">
+  <h1 style="margin-bottom: 6px;">Ledger</h1>
+  <p class="sub" id="authSub">Sign in to see your goals.</p>
+  <div class="field">
+    <label for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+  </div>
+  <div class="field">
+    <label for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••">
+  </div>
+  <div id="authError" style="color: var(--danger); font-size: 12.5px; margin-bottom: 12px; display:none;"></div>
+  <button class="btn-primary" id="authSubmit" style="width:100%; margin-bottom: 10px;">Sign in</button>
+  <button class="btn-cancel" id="authToggle" style="width:100%;">Need an account? Sign up</button>
+</div>
+
+<div class="wrap" id="appScreen" style="display:none;">
+  <header class="top">
+    <h1>Ledger</h1>
+    <button class="btn-icon" id="signOutBtn">sign out</button>
+  </header>
+
+  <section class="view" id="overviewView">
+    <p class="sub">What comes in, what goes out, and what's left.</p>
+    <div id="overviewContent"></div>
+  </section>
+
+  <section class="view" id="goalsView">
+    <p class="sub">What you're saving for, and how far you've come.</p>
+
+    <div class="totals" id="totals"></div>
+    <div class="chip-row" id="categoryChips"></div>
+    <div class="goal-list" id="goalList"></div>
+
+    <button class="add-goal-btn" id="openAddGoal">+ New goal</button>
+  </section>
+
+  <section class="view" id="billsView">
+    <p class="sub">What goes out regularly, and when it's due next.</p>
+
+    <div class="totals" id="billTotals"></div>
+    <div class="goal-list" id="billList"></div>
+
+    <button class="add-goal-btn" id="openAddBill">+ New bill</button>
+  </section>
+
+  <nav class="tabbar">
+    <div class="tabbar-inner">
+      <a class="tab" href="#overview" data-view="overview">Overview</a>
+      <a class="tab" href="#goals" data-view="goals">Goals</a>
+      <a class="tab" href="#bills" data-view="bills">Bills</a>
+    </div>
+  </nav>
+</div>
+
+<!-- Add/Edit Bill Sheet -->
+<div class="overlay" id="billOverlay">
+  <div class="sheet">
+    <h2 id="billSheetTitle">New bill</h2>
+    <div class="field">
+      <label for="billNameInput" id="billNameLabel">What's the bill?</label>
+      <input id="billNameInput" type="text" placeholder="e.g. Council tax" maxlength="60">
+    </div>
+    <div class="field">
+      <label for="billAmountInput">Amount</label>
+      <input id="billAmountInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="billFrequencyInput">How often?</label>
+      <select id="billFrequencyInput">
+        <option value="weekly">Weekly</option>
+        <option value="fortnightly">Fortnightly</option>
+        <option value="monthly" selected>Monthly</option>
+        <option value="quarterly">Quarterly</option>
+        <option value="yearly">Yearly</option>
+        <option value="once">One-off</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="billDateInput" id="billDateLabel">Due date</label>
+      <input id="billDateInput" type="date">
+      <div class="field-hint">Any date it's due. Recurring bills repeat from here.</div>
+    </div>
+    <div class="field" id="billEndField">
+      <label for="billEndInput">Last payment (optional)</label>
+      <input id="billEndInput" type="date">
+      <div class="field-hint">For finance deals or contracts that stop. Leave blank if it runs indefinitely.</div>
+    </div>
+    <div class="field" id="billCategoryField">
+      <label for="billCategoryInput">Category (optional)</label>
+      <input id="billCategoryInput" type="text" placeholder="e.g. Utilities" maxlength="30" list="billCategoryList">
+      <datalist id="billCategoryList"></datalist>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelBill">Cancel</button>
+      <button class="btn-primary" id="saveBill">Save bill</button>
+    </div>
+    <div class="sheet-actions" id="deleteBillRow" style="display:none; margin-top: 4px;">
+      <button class="btn-cancel btn-danger-text" id="deleteBill" style="flex:1; text-align:left;">Delete this bill</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill Payments Sheet -->
+<div class="overlay" id="billHistoryOverlay">
+  <div class="sheet">
+    <h2>Payments — <span id="billHistoryName"></span></h2>
+    <div id="billHistoryList"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="closeBillHistory" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Goal Sheet -->
+<div class="overlay" id="goalOverlay">
+  <div class="sheet">
+    <h2 id="goalSheetTitle">New goal</h2>
+    <div class="field">
+      <label for="goalNameInput">What are you saving for?</label>
+      <input id="goalNameInput" type="text" placeholder="e.g. New camera" maxlength="60">
+    </div>
+    <div class="field">
+      <label for="goalTargetInput">Target amount</label>
+      <input id="goalTargetInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="goalCategoryInput">Category (optional)</label>
+      <input id="goalCategoryInput" type="text" placeholder="e.g. Travel" maxlength="30" list="categoryList">
+      <datalist id="categoryList"></datalist>
+    </div>
+    <div class="field">
+      <label for="goalDateInput">Target date (optional)</label>
+      <input id="goalDateInput" type="date">
+      <div class="field-hint">Set this and I'll work out how much to save each month.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelGoal">Cancel</button>
+      <button class="btn-primary" id="saveGoal">Save goal</button>
+    </div>
+    <div class="sheet-actions" id="deleteGoalRow" style="display:none; margin-top: 4px;">
+      <button class="btn-cancel btn-danger-text" id="deleteGoal" style="flex:1; text-align:left;">Delete this goal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Deposit Sheet -->
+<div class="overlay" id="depositOverlay">
+  <div class="sheet">
+    <h2 id="depositSheetTitle">Add to <span id="depositGoalName"></span></h2>
+    <div class="field">
+      <label for="depositAmountInput">Amount</label>
+      <input id="depositAmountInput" type="number" inputmode="decimal" placeholder="0" step="0.01">
+      <div class="field-hint">Enter a negative number to correct or withdraw.</div>
+    </div>
+    <div class="field">
+      <label for="depositNoteInput">Note (optional)</label>
+      <input id="depositNoteInput" type="text" placeholder="e.g. birthday money" maxlength="60">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelDeposit">Cancel</button>
+      <button class="btn-primary" id="saveDeposit">Add</button>
+    </div>
+    <div class="sheet-actions" id="deleteDepositRow" style="display:none; margin-top: 4px;">
+      <button class="btn-cancel btn-danger-text" id="deleteDeposit" style="flex:1; text-align:left;">Delete this entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Sheet -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet">
+    <h2>History — <span id="historyGoalName"></span></h2>
+    <div id="historyList"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="closeHistory" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  const SUPABASE_URL = 'https://vpbrurxowgneplxpwkkv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwYnJ1cnhvd2duZXBseHB3a2t2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MzAwNzcsImV4cCI6MjEwNjEwNjA3N30.3yq74-z1tkQDNA8BB6JFG3_yFwLN-yjHz_7WJyrAqDs';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let goals = [];
+  let editingGoalId = null;
+  let depositGoalId = null;
+  let editingDepositId = null;
+  let historyGoalId = null;
+  let activeCategory = 'All';
+  let authMode = 'signin';
+  let bills = [];         // bills and income sources, told apart by .kind
+  let payments = [];
+  let paidIndex = new Map(); // "billId|YYYY-MM-DD" -> payment
+  let editingBillId = null;
+  let editingBillKind = 'bill';
+  let historyBillId = null;
+
+  // ---------- Mapping ----------
+  function fromGoalRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      target: Number(row.target),
+      saved: Number(row.saved),
+      category: row.category || '',
+      targetDate: row.target_date || null,
+      sortOrder: row.sort_order == null ? 0 : Number(row.sort_order),
+      createdAt: row.created_at
+    };
+  }
+  function fromDepositRow(row) {
+    return {
+      id: row.id,
+      goalId: row.goal_id,
+      amount: Number(row.amount),
+      note: row.note || '',
+      createdAt: row.created_at
+    };
+  }
+
+  // ---------- Goals CRUD ----------
+  async function loadGoals() {
+    try {
+      const { data, error } = await sb.from('goals').select('*').order('sort_order', { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      goals = data.map(fromGoalRow);
+    } catch (e) {
+      showToast("Couldn't load — check your connection");
+      goals = [];
+    }
+  }
+
+  async function createGoalRemote(name, target, category, targetDate) {
+    const nextOrder = goals.length ? Math.max(...goals.map(g => g.sortOrder)) + 1 : 1;
+    const { data, error } = await sb.from('goals').insert([{
+      name, target, saved: 0,
+      category: category || null,
+      target_date: targetDate || null,
+      sort_order: nextOrder
+    }]).select();
+    if (error) throw error;
+    return fromGoalRow(data[0]);
+  }
+
+  async function updateGoalRemote(id, fields) {
+    const { error } = await sb.from('goals').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deleteGoalRemote(id) {
+    const { error } = await sb.from('goals').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Deposits CRUD ----------
+  async function loadDeposits(goalId) {
+    const { data, error } = await sb.from('deposits').select('*').eq('goal_id', goalId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map(fromDepositRow);
+  }
+
+  async function createDepositRemote(goalId, amount, note) {
+    const { data, error } = await sb.from('deposits').insert([{ goal_id: goalId, amount, note: note || null }]).select();
+    if (error) throw error;
+    return fromDepositRow(data[0]);
+  }
+
+  async function updateDepositRemote(id, fields) {
+    const { error } = await sb.from('deposits').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deleteDepositRemote(id) {
+    const { error } = await sb.from('deposits').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Bills CRUD ----------
+  function fromBillRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      amount: Number(row.amount),
+      frequency: row.frequency,
+      startDate: row.start_date,
+      endDate: row.end_date || null,
+      kind: row.kind || 'bill',
+      category: row.category || '',
+      createdAt: row.created_at
+    };
+  }
+
+  function fromPaymentRow(row) {
+    return {
+      id: row.id,
+      billId: row.bill_id,
+      dueDate: row.due_date,
+      amount: Number(row.amount),
+      paidAt: row.paid_at
+    };
+  }
+
+  async function loadBills() {
+    try {
+      const { data, error } = await sb.from('bills').select('*').order('created_at', { ascending: true });
+      if (error) throw error;
+      bills = data.map(fromBillRow);
+    } catch (e) {
+      showToast("Couldn't load bills — check your connection");
+      bills = [];
+    }
+  }
+
+  async function createBillRemote(fields) {
+    const { data, error } = await sb.from('bills').insert([fields]).select();
+    if (error) throw error;
+    return fromBillRow(data[0]);
+  }
+
+  async function updateBillRemote(id, fields) {
+    const { error } = await sb.from('bills').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deleteBillRemote(id) {
+    const { error } = await sb.from('bills').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Bill payments CRUD ----------
+  async function loadPayments() {
+    try {
+      const { data, error } = await sb.from('bill_payments').select('*').order('due_date', { ascending: false });
+      if (error) throw error;
+      payments = data.map(fromPaymentRow);
+    } catch (e) {
+      showToast("Couldn't load payments — check your connection");
+      payments = [];
+    }
+  }
+
+  async function createPaymentRemote(billId, dueDate, amount) {
+    const { data, error } = await sb.from('bill_payments').insert([{ bill_id: billId, due_date: dueDate, amount }]).select();
+    if (error) throw error;
+    return fromPaymentRow(data[0]);
+  }
+
+  async function deletePaymentRemote(id) {
+    const { error } = await sb.from('bill_payments').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Bill schedule maths ----------
+  const FREQUENCY_LABELS = {
+    weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly',
+    quarterly: 'Quarterly', yearly: 'Yearly', once: 'One-off'
+  };
+  const PER_MONTH = { weekly: 52 / 12, fortnightly: 26 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12, once: 0 };
+
+  function parseLocalDate(s) {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function toISODate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function startOfToday() {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  }
+
+  function addDays(d, n) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  }
+
+  // nth occurrence from start. Month-based bills keep the start's day, clamped to the month's end (31st -> 30th/28th).
+  function occurrence(start, freq, n) {
+    if (freq === 'weekly') return addDays(start, 7 * n);
+    if (freq === 'fortnightly') return addDays(start, 14 * n);
+    const step = { monthly: 1, quarterly: 3, yearly: 12 }[freq];
+    const y = start.getFullYear(), m = start.getMonth() + step * n;
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(start.getDate(), lastDay));
+  }
+
+  // Occurrences on or after `from`, in order, stopping after the end date (if any).
+  function* occurrencesFrom(bill, from) {
+    const start = parseLocalDate(bill.startDate);
+    if (bill.frequency === 'once') {
+      if (start >= from) yield start;
+      return;
+    }
+    const end = bill.endDate ? parseLocalDate(bill.endDate) : null;
+    for (let n = 0, d = start; !end || d <= end; d = occurrence(start, bill.frequency, ++n)) {
+      if (d >= from) yield d;
+    }
+  }
+
+  // Occurrences within [from, to], in order.
+  function occurrencesBetween(bill, from, to) {
+    const out = [];
+    for (const d of occurrencesFrom(bill, from)) {
+      if (d > to) break;
+      out.push(d);
+    }
+    return out;
+  }
+
+  function nextDue(bill) {
+    return occurrencesFrom(bill, startOfToday()).next().value || null;
+  }
+
+  // Recurring bills are tracked from the day they were added; occurrences before that count as settled.
+  function trackFrom(bill) {
+    if (bill.frequency === 'once') return parseLocalDate(bill.startDate);
+    const c = new Date(bill.createdAt);
+    return new Date(c.getFullYear(), c.getMonth(), c.getDate());
+  }
+
+  function indexPayments() {
+    paidIndex = new Map(payments.map(p => [p.billId + '|' + p.dueDate, p]));
+  }
+
+  function paymentFor(bill, d) {
+    return paidIndex.get(bill.id + '|' + toISODate(d));
+  }
+
+  // The occurrence to pay next: the earliest unpaid one (possibly overdue), or null when everything is paid.
+  function firstUnpaid(bill) {
+    for (const d of occurrencesFrom(bill, trackFrom(bill))) {
+      if (!paymentFor(bill, d)) return d;
+    }
+    return null;
+  }
+
+  function unpaidBetween(bill, from, to) {
+    return occurrencesBetween(bill, from, to).filter(d => !paymentFor(bill, d));
+  }
+
+  // Average per month across entries that haven't ended.
+  function monthlyAverage(list, today) {
+    return list
+      .filter(b => !b.endDate || parseLocalDate(b.endDate) >= today)
+      .reduce((s, b) => s + b.amount * PER_MONTH[b.frequency], 0);
+  }
+
+  function shortDate(d) {
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  function dueLabel(date, today) {
+    const days = Math.round((date - today) / 86400000);
+    const short = shortDate(date);
+    if (days < 0) return `Overdue · was due ${short}`;
+    if (days === 0) return 'Due today';
+    if (days === 1) return 'Due tomorrow';
+    return `Due in ${days} days · ${short}`;
+  }
+
+  // ---------- Helpers ----------
+  function formatMoney(n) {
+    const sign = n < 0 ? '-' : '';
+    const abs = Math.round(Math.abs(Number(n)) * 100) / 100;
+    const pence = Number.isInteger(abs) ? 0 : 2; // £950, but £174.50 rather than £174.5
+    return sign + '£' + abs.toLocaleString('en-GB', { minimumFractionDigits: pence, maximumFractionDigits: 2 });
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  function monthlyNeeded(goal) {
+    if (!goal.targetDate) return null;
+    const remaining = goal.target - goal.saved;
+    if (remaining <= 0) return null;
+    const today = new Date();
+    const due = new Date(goal.targetDate + 'T00:00:00');
+    const diffMs = due - today;
+    if (diffMs <= 0) {
+      return { overdue: true, remaining };
+    }
+    const monthsLeft = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
+    const monthly = remaining / monthsLeft;
+    return { monthly, dueLabel: due.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) };
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ---------- Category chips ----------
+  function renderChips() {
+    const row = document.getElementById('categoryChips');
+    const cats = Array.from(new Set(goals.map(g => g.category).filter(Boolean)));
+    if (cats.length === 0) {
+      row.style.display = 'none';
+      activeCategory = 'All';
+      return;
+    }
+    row.style.display = 'flex';
+    const all = ['All', ...cats];
+    row.innerHTML = all.map(c => `<button class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+    row.querySelectorAll('.chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCategory = btn.dataset.cat;
+        render();
+      });
+    });
+  }
+
+  // ---------- Main render ----------
+  function render() {
+    indexPayments();
+    renderGoals();
+    renderBills();
+    renderOverview();
+  }
+
+  function renderGoals() {
+    renderChips();
+    const list = document.getElementById('goalList');
+    const totalsEl = document.getElementById('totals');
+
+    if (goals.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="big">No goals yet</div>Tap "New goal" to start saving toward something.</div>';
+      totalsEl.style.display = 'none';
+      return;
+    }
+
+    totalsEl.style.display = 'flex';
+    const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
+    const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+    totalsEl.innerHTML = `
+      <div class="item">
+        <div class="num">${formatMoney(totalSaved)}</div>
+        <div class="lbl">saved</div>
+      </div>
+      <div class="item">
+        <div class="num">${formatMoney(totalTarget)}</div>
+        <div class="lbl">across ${goals.length} goal${goals.length === 1 ? '' : 's'}</div>
+      </div>
+    `;
+
+    const displayed = activeCategory === 'All' ? goals : goals.filter(g => g.category === activeCategory);
+    const showReorder = activeCategory === 'All';
+
+    if (displayed.length === 0) {
+      list.innerHTML = '<div class="empty">No goals in this category.</div>';
+      return;
+    }
+
+    list.innerHTML = displayed.map((g, idx) => {
+      const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
+      const done = g.saved >= g.target && g.target > 0;
+      const suggestion = monthlyNeeded(g);
+      let suggestionHtml = '';
+      if (suggestion && suggestion.overdue) {
+        suggestionHtml = `<div class="suggestion-line overdue">Target date passed — ${formatMoney(suggestion.remaining)} still needed</div>`;
+      } else if (suggestion) {
+        suggestionHtml = `<div class="suggestion-line">Save ${formatMoney(suggestion.monthly)}/mo to hit this by ${suggestion.dueLabel}</div>`;
+      }
+      const reorderHtml = showReorder ? `
+        <button class="btn-icon reorder-up" data-id="${g.id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="btn-icon reorder-down" data-id="${g.id}" ${idx === displayed.length - 1 ? 'disabled' : ''}>▼</button>
+      ` : '';
+      return `
+        <div class="goal ${done ? 'done' : ''}" data-id="${g.id}">
+          <div class="goal-head">
+            <div class="goal-name">${done ? '✓' : ''} ${escapeHtml(g.name)}</div>
+            <div class="goal-head-actions">
+              ${reorderHtml}
+              <button class="btn-icon edit-goal" data-id="${g.id}">edit</button>
+            </div>
+          </div>
+          ${g.category ? `<div class="badge-category">${escapeHtml(g.category)}</div>` : ''}
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          ${suggestionHtml}
+          <div class="goal-foot">
+            <div class="goal-amounts"><span class="saved">${formatMoney(g.saved)}</span> of ${formatMoney(g.target)}</div>
+            <div class="goal-actions">
+              <span class="pct">${pct.toFixed(0)}%</span>
+              <button class="btn-small history-btn" data-id="${g.id}">History</button>
+              ${!done ? `<button class="btn-small add-deposit" data-id="${g.id}">+ Add</button>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.add-deposit').forEach(btn => btn.addEventListener('click', () => openDepositSheet(btn.dataset.id)));
+    list.querySelectorAll('.edit-goal').forEach(btn => btn.addEventListener('click', () => openGoalSheet(btn.dataset.id)));
+    list.querySelectorAll('.history-btn').forEach(btn => btn.addEventListener('click', () => openHistorySheet(btn.dataset.id)));
+    list.querySelectorAll('.reorder-up').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, -1)));
+    list.querySelectorAll('.reorder-down').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, 1)));
+  }
+
+  // ---------- Reordering ----------
+  async function moveGoal(id, dir) {
+    const idx = goals.findIndex(g => g.id === id);
+    const otherIdx = idx + dir;
+    if (idx === -1 || otherIdx < 0 || otherIdx >= goals.length) return;
+    const a = goals[idx], b = goals[otherIdx];
+    const aOrder = a.sortOrder, bOrder = b.sortOrder;
+    try {
+      await Promise.all([
+        updateGoalRemote(a.id, { sort_order: bOrder }),
+        updateGoalRemote(b.id, { sort_order: aOrder })
+      ]);
+      a.sortOrder = bOrder;
+      b.sortOrder = aOrder;
+      goals.sort((x, y) => x.sortOrder - y.sortOrder);
+      render();
+    } catch (e) {
+      showToast("Couldn't reorder — check your connection");
+    }
+  }
+
+  // ---------- Category datalist ----------
+  function refreshCategoryDatalist() {
+    const dl = document.getElementById('categoryList');
+    const cats = Array.from(new Set(goals.map(g => g.category).filter(Boolean)));
+    dl.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+  }
+
+  // ---------- Goal sheet ----------
+  const goalOverlay = document.getElementById('goalOverlay');
+  const goalNameInput = document.getElementById('goalNameInput');
+  const goalTargetInput = document.getElementById('goalTargetInput');
+  const goalCategoryInput = document.getElementById('goalCategoryInput');
+  const goalDateInput = document.getElementById('goalDateInput');
+  const goalSheetTitle = document.getElementById('goalSheetTitle');
+  const deleteGoalRow = document.getElementById('deleteGoalRow');
+
+  function openGoalSheet(id) {
+    editingGoalId = id || null;
+    refreshCategoryDatalist();
+    if (id) {
+      const g = goals.find(x => x.id === id);
+      goalSheetTitle.textContent = 'Edit goal';
+      goalNameInput.value = g.name;
+      goalTargetInput.value = g.target;
+      goalCategoryInput.value = g.category || '';
+      goalDateInput.value = g.targetDate || '';
+      deleteGoalRow.style.display = 'flex';
+    } else {
+      goalSheetTitle.textContent = 'New goal';
+      goalNameInput.value = '';
+      goalTargetInput.value = '';
+      goalCategoryInput.value = '';
+      goalDateInput.value = '';
+      deleteGoalRow.style.display = 'none';
+    }
+    goalOverlay.classList.add('open');
+    setTimeout(() => goalNameInput.focus(), 100);
+  }
+
+  function closeGoalSheet() {
+    goalOverlay.classList.remove('open');
+    editingGoalId = null;
+  }
+
+  document.getElementById('openAddGoal').addEventListener('click', () => openGoalSheet(null));
+  document.getElementById('cancelGoal').addEventListener('click', closeGoalSheet);
+  goalOverlay.addEventListener('click', (e) => { if (e.target === goalOverlay) closeGoalSheet(); });
+
+  document.getElementById('saveGoal').addEventListener('click', async () => {
+    const name = goalNameInput.value.trim();
+    const target = parseFloat(goalTargetInput.value);
+    const category = goalCategoryInput.value.trim();
+    const targetDate = goalDateInput.value || null;
+    if (!name) { showToast('Give the goal a name'); return; }
+    if (!(target > 0)) { showToast('Enter a target amount'); return; }
+
+    const saveBtn = document.getElementById('saveGoal');
+    saveBtn.disabled = true;
+    try {
+      if (editingGoalId) {
+        await updateGoalRemote(editingGoalId, { name, target, category: category || null, target_date: targetDate });
+        const g = goals.find(x => x.id === editingGoalId);
+        g.name = name; g.target = target; g.category = category; g.targetDate = targetDate;
+      } else {
+        const newGoal = await createGoalRemote(name, target, category, targetDate);
+        goals.push(newGoal);
+      }
+      render();
+      closeGoalSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteGoal').addEventListener('click', async () => {
+    if (!editingGoalId) return;
+    const idToDelete = editingGoalId;
+    try {
+      await deleteGoalRemote(idToDelete);
+      goals = goals.filter(g => g.id !== idToDelete);
+      render();
+      closeGoalSheet();
+      showToast('Goal deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- Deposit sheet (add + edit) ----------
+  const depositOverlay = document.getElementById('depositOverlay');
+  const depositAmountInput = document.getElementById('depositAmountInput');
+  const depositNoteInput = document.getElementById('depositNoteInput');
+  const depositGoalName = document.getElementById('depositGoalName');
+  const depositSheetTitle = document.getElementById('depositSheetTitle');
+  const deleteDepositRow = document.getElementById('deleteDepositRow');
+  let editingDepositOriginalAmount = 0;
+
+  function openDepositSheet(goalId) {
+    depositGoalId = goalId;
+    editingDepositId = null;
+    const g = goals.find(x => x.id === goalId);
+    depositSheetTitle.innerHTML = 'Add to <span id="depositGoalName">' + escapeHtml(g.name) + '</span>';
+    depositAmountInput.value = '';
+    depositNoteInput.value = '';
+    deleteDepositRow.style.display = 'none';
+    depositOverlay.classList.add('open');
+    setTimeout(() => depositAmountInput.focus(), 100);
+  }
+
+  function openEditDepositSheet(dep, goalId) {
+    depositGoalId = goalId;
+    editingDepositId = dep.id;
+    editingDepositOriginalAmount = dep.amount;
+    const g = goals.find(x => x.id === goalId);
+    depositSheetTitle.innerHTML = 'Edit entry — <span>' + escapeHtml(g.name) + '</span>';
+    depositAmountInput.value = dep.amount;
+    depositNoteInput.value = dep.note || '';
+    deleteDepositRow.style.display = 'flex';
+    depositOverlay.classList.add('open');
+    setTimeout(() => depositAmountInput.focus(), 100);
+  }
+
+  function closeDepositSheet() {
+    depositOverlay.classList.remove('open');
+    depositGoalId = null;
+    editingDepositId = null;
+  }
+
+  document.getElementById('cancelDeposit').addEventListener('click', closeDepositSheet);
+  depositOverlay.addEventListener('click', (e) => { if (e.target === depositOverlay) closeDepositSheet(); });
+
+  document.getElementById('saveDeposit').addEventListener('click', async () => {
+    const amount = parseFloat(depositAmountInput.value);
+    const note = depositNoteInput.value.trim();
+    if (!amount || amount === 0) { showToast('Enter an amount'); return; }
+    const g = goals.find(x => x.id === depositGoalId);
+    const saveBtn = document.getElementById('saveDeposit');
+    saveBtn.disabled = true;
+    try {
+      if (editingDepositId) {
+        const diff = amount - editingDepositOriginalAmount;
+        await updateDepositRemote(editingDepositId, { amount, note: note || null });
+        await updateGoalRemote(g.id, { saved: g.saved + diff });
+        g.saved += diff;
+        showToast('Entry updated');
+      } else {
+        await createDepositRemote(g.id, amount, note);
+        await updateGoalRemote(g.id, { saved: g.saved + amount });
+        g.saved += amount;
+        showToast(`${amount > 0 ? 'Added' : 'Adjusted'} ${formatMoney(amount)} — ${g.name}`);
+      }
+      render();
+      closeDepositSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteDeposit').addEventListener('click', async () => {
+    if (!editingDepositId) return;
+    const g = goals.find(x => x.id === depositGoalId);
+    try {
+      await deleteDepositRemote(editingDepositId);
+      await updateGoalRemote(g.id, { saved: g.saved - editingDepositOriginalAmount });
+      g.saved -= editingDepositOriginalAmount;
+      render();
+      closeDepositSheet();
+      showToast('Entry deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- History sheet ----------
+  const historyOverlay = document.getElementById('historyOverlay');
+  const historyGoalName = document.getElementById('historyGoalName');
+  const historyList = document.getElementById('historyList');
+
+  async function openHistorySheet(goalId) {
+    historyGoalId = goalId;
+    const g = goals.find(x => x.id === goalId);
+    historyGoalName.textContent = g.name;
+    historyList.innerHTML = '<div class="history-empty">Loading…</div>';
+    historyOverlay.classList.add('open');
+    try {
+      const deposits = await loadDeposits(goalId);
+      if (deposits.length === 0) {
+        historyList.innerHTML = '<div class="history-empty">No entries yet.</div>';
+        return;
+      }
+      historyList.innerHTML = deposits.map(d => `
+        <div class="history-item" data-id="${d.id}">
+          <div class="history-main">
+            <div class="amt ${d.amount < 0 ? 'negative' : ''}">${d.amount > 0 ? '+' : ''}${formatMoney(d.amount)}</div>
+            <div class="meta">${formatDate(d.createdAt)}${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
+          </div>
+          <button class="btn-icon edit-deposit" data-id="${d.id}">edit</button>
+        </div>
+      `).join('');
+      historyList.querySelectorAll('.edit-deposit').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const dep = deposits.find(x => x.id === btn.dataset.id);
+          historyOverlay.classList.remove('open');
+          openEditDepositSheet(dep, goalId);
+        });
+      });
+    } catch (e) {
+      historyList.innerHTML = '<div class="history-empty">Couldn\'t load history.</div>';
+    }
+  }
+
+  document.getElementById('closeHistory').addEventListener('click', () => {
+    historyOverlay.classList.remove('open');
+  });
+  historyOverlay.addEventListener('click', (e) => { if (e.target === historyOverlay) historyOverlay.classList.remove('open'); });
+
+  // ---------- Bills render ----------
+  function renderBills() {
+    const list = document.getElementById('billList');
+    const totalsEl = document.getElementById('billTotals');
+    const billsOnly = bills.filter(b => b.kind === 'bill');
+
+    if (billsOnly.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="big">No bills yet</div>Tap "New bill" to add your regular outgoings.</div>';
+      totalsEl.style.display = 'none';
+      return;
+    }
+
+    const today = startOfToday();
+    const horizon = addDays(today, 30);
+    const monthly = monthlyAverage(billsOnly, today);
+    const outstanding = billsOnly.reduce((s, b) => s + b.amount * unpaidBetween(b, trackFrom(b), horizon).length, 0);
+    totalsEl.style.display = 'flex';
+    totalsEl.innerHTML = `
+      <div class="item">
+        <div class="num">${formatMoney(monthly)}</div>
+        <div class="lbl">a month, on average</div>
+      </div>
+      <div class="item">
+        <div class="num">${formatMoney(outstanding)}</div>
+        <div class="lbl">unpaid, due in the next 30 days</div>
+      </div>
+    `;
+
+    // Next unpaid soonest first (overdue at the top); paid-off and finished bills sink to the bottom.
+    const rows = billsOnly.map(b => ({ b, due: firstUnpaid(b) }))
+      .sort((x, y) => (!x.due - !y.due) || (x.due - y.due));
+
+    list.innerHTML = rows.map(({ b, due }) => {
+      const overdue = due && due < today;
+      const soon = due && !overdue && due <= addDays(today, 7);
+      let status;
+      if (!due) status = b.frequency === 'once' ? 'Paid' : `Finished ${shortDate(parseLocalDate(b.endDate))}`;
+      else status = dueLabel(due, today);
+      const left = due && b.endDate && b.frequency !== 'once' ? unpaidBetween(b, due, parseLocalDate(b.endDate)).length : 0;
+      const hasPayments = payments.some(p => p.billId === b.id);
+      return `
+        <div class="goal ${soon ? 'soon' : ''} ${overdue ? 'overdue' : ''} ${!due ? 'past' : ''}">
+          <div class="goal-head">
+            <div class="goal-name">${!due ? '✓' : ''} ${escapeHtml(b.name)}</div>
+            <div class="goal-head-actions">
+              <button class="btn-icon edit-bill" data-id="${b.id}">edit</button>
+            </div>
+          </div>
+          ${b.category ? `<div class="badge-category">${escapeHtml(b.category)}</div>` : ''}
+          <div class="bill-foot">
+            <div class="bill-due">${FREQUENCY_LABELS[b.frequency]} · ${status}${left ? ` · ${left} left` : ''}</div>
+            <div class="bill-amount">${formatMoney(b.amount)}</div>
+          </div>
+          ${hasPayments || due ? `
+          <div class="bill-actions">
+            ${hasPayments ? `<button class="btn-small bill-history-btn" data-id="${b.id}">Payments</button>` : ''}
+            ${due ? `<button class="btn-small mark-paid" data-id="${b.id}" data-date="${toISODate(due)}">Mark paid</button>` : ''}
+          </div>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.edit-bill').forEach(btn => btn.addEventListener('click', () => openBillSheet(btn.dataset.id)));
+    list.querySelectorAll('.bill-history-btn').forEach(btn => btn.addEventListener('click', () => openBillHistory(btn.dataset.id)));
+    list.querySelectorAll('.mark-paid').forEach(btn => btn.addEventListener('click', () => markPaid(btn)));
+  }
+
+  async function markPaid(btn) {
+    const b = bills.find(x => x.id === btn.dataset.id);
+    const dueISO = btn.dataset.date;
+    btn.disabled = true;
+    try {
+      payments.unshift(await createPaymentRemote(b.id, dueISO, b.amount));
+      render();
+      showToast(`Paid ${b.name} — ${shortDate(parseLocalDate(dueISO))}`);
+    } catch (e) {
+      btn.disabled = false;
+      showToast("Couldn't save — check your connection");
+    }
+  }
+
+  // ---------- Overview render ----------
+  function renderOverview() {
+    const el = document.getElementById('overviewContent');
+    const today = startOfToday();
+    const billsOnly = bills.filter(b => b.kind === 'bill');
+    const income = bills.filter(b => b.kind === 'income');
+
+    // Monthly picture
+    const incomeMonthly = monthlyAverage(income, today);
+    const billsMonthly = monthlyAverage(billsOnly, today);
+    const leftOver = incomeMonthly - billsMonthly;
+    const goalsMonthly = goals.reduce((s, g) => {
+      const m = monthlyNeeded(g);
+      return s + (m && !m.overdue ? m.monthly : 0);
+    }, 0);
+    const neg = n => n < 0 ? 'negative' : '';
+    let html = `
+      <div class="statement">
+        <div class="statement-row">
+          <div>Income<span class="meta">${income.length ? 'monthly average' : 'none added yet'}</span></div>
+          <div class="amt">${formatMoney(incomeMonthly)}</div>
+        </div>
+        <div class="statement-row">
+          <div>Bills<span class="meta">monthly average</span></div>
+          <div class="amt">−${formatMoney(billsMonthly)}</div>
+        </div>
+        <div class="statement-row total">
+          <div>Left over</div>
+          <div class="amt ${neg(leftOver)}">${formatMoney(leftOver)}</div>
+        </div>
+        ${goalsMonthly > 0 ? `
+        <div class="statement-row">
+          <div>Goals<span class="meta">to hit your target dates</span></div>
+          <div class="amt">−${formatMoney(goalsMonthly)}</div>
+        </div>
+        <div class="statement-row total">
+          <div>Free to spend</div>
+          <div class="amt ${neg(leftOver - goalsMonthly)}">${formatMoney(leftOver - goalsMonthly)}</div>
+        </div>` : ''}
+      </div>
+    `;
+
+    // This calendar month's bills: paid vs total
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    let monthPaid = 0, monthTotal = 0, monthOverdue = 0;
+    billsOnly.forEach(b => {
+      const from = trackFrom(b) > monthStart ? trackFrom(b) : monthStart;
+      occurrencesBetween(b, from, monthEnd).forEach(d => {
+        const p = paymentFor(b, d);
+        monthTotal += p ? p.amount : b.amount;
+        if (p) monthPaid += p.amount;
+        else if (d < today) monthOverdue++;
+      });
+    });
+    if (monthTotal > 0) {
+      const pct = Math.min(100, (monthPaid / monthTotal) * 100);
+      const monthName = today.toLocaleDateString('en-GB', { month: 'long' });
+      let note = monthPaid >= monthTotal ? 'All paid for this month.' : `${formatMoney(monthTotal - monthPaid)} still to pay.`;
+      if (monthOverdue) note += ` <span style="color: var(--danger)">${monthOverdue} overdue.</span>`;
+      html += `
+        <h3 class="section-title">${monthName} bills</h3>
+        <div class="statement">
+          <div class="month-head"><span>${formatMoney(monthPaid)} paid</span><span class="amt">of ${formatMoney(monthTotal)}</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div class="bill-due" style="padding-bottom: 14px;">${note}</div>
+        </div>
+      `;
+    }
+
+    // Coming up: unpaid bills (including overdue) and income in the next 14 days
+    const horizon = addDays(today, 14);
+    const items = [];
+    billsOnly.forEach(b => unpaidBetween(b, trackFrom(b), horizon).forEach(d => items.push({ b, d, isIncome: false })));
+    income.forEach(b => occurrencesBetween(b, today, horizon).forEach(d => items.push({ b, d, isIncome: true })));
+    items.sort((x, y) => x.d - y.d);
+    html += `<h3 class="section-title">Next two weeks</h3><div class="statement">`;
+    html += items.length === 0 ? '<div class="statement-empty">Nothing due in the next two weeks.</div>' : items.map(({ b, d, isIncome }) => {
+      const overdue = !isIncome && d < today;
+      const when = overdue ? `Overdue · ${shortDate(d)}` : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      return `
+        <div class="statement-row">
+          <div>${escapeHtml(b.name)}<span class="meta when ${overdue ? 'overdue' : ''}">${when}</span></div>
+          <div class="row-end">
+            <div class="amt">${isIncome ? '+' : ''}${formatMoney(b.amount)}</div>
+            ${isIncome ? '' : `<button class="btn-small mark-paid" data-id="${b.id}" data-date="${toISODate(d)}">Paid</button>`}
+          </div>
+        </div>
+      `;
+    }).join('');
+    html += '</div>';
+
+    // Income sources
+    html += `<h3 class="section-title">Income</h3>`;
+    if (income.length) {
+      html += '<div class="statement">' + income.map(b => {
+        const next = nextDue(b);
+        const status = next ? `next ${shortDate(next)}` : 'ended';
+        return `
+          <div class="statement-row">
+            <div>${escapeHtml(b.name)}<span class="meta">${FREQUENCY_LABELS[b.frequency]} · ${status}</span></div>
+            <div class="row-end">
+              <div class="amt">${formatMoney(b.amount)}</div>
+              <button class="btn-icon edit-bill" data-id="${b.id}">edit</button>
+            </div>
+          </div>
+        `;
+      }).join('') + '</div>';
+    }
+    html += '<button class="add-goal-btn" id="openAddIncome" style="margin-top: 0;">+ Add income</button>';
+
+    el.innerHTML = html;
+    el.querySelectorAll('.mark-paid').forEach(btn => btn.addEventListener('click', () => markPaid(btn)));
+    el.querySelectorAll('.edit-bill').forEach(btn => btn.addEventListener('click', () => openBillSheet(btn.dataset.id)));
+    document.getElementById('openAddIncome').addEventListener('click', () => openBillSheet(null, 'income'));
+  }
+
+  // ---------- Bill payments sheet ----------
+  const billHistoryOverlay = document.getElementById('billHistoryOverlay');
+  const billHistoryList = document.getElementById('billHistoryList');
+
+  function openBillHistory(billId) {
+    historyBillId = billId;
+    const b = bills.find(x => x.id === billId);
+    document.getElementById('billHistoryName').textContent = b.name;
+    renderBillHistory();
+    billHistoryOverlay.classList.add('open');
+  }
+
+  function renderBillHistory() {
+    const list = payments.filter(p => p.billId === historyBillId)
+      .sort((x, y) => (x.dueDate < y.dueDate ? 1 : -1));
+    if (list.length === 0) {
+      billHistoryList.innerHTML = '<div class="history-empty">No payments recorded.</div>';
+      return;
+    }
+    const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    billHistoryList.innerHTML = list.map(p => `
+      <div class="history-item">
+        <div class="history-main">
+          <div class="amt">${formatMoney(p.amount)}</div>
+          <div class="meta">Due ${fmt(parseLocalDate(p.dueDate))} · marked paid ${fmt(new Date(p.paidAt))}</div>
+        </div>
+        <button class="btn-icon undo-payment" data-id="${p.id}">undo</button>
+      </div>
+    `).join('');
+    billHistoryList.querySelectorAll('.undo-payment').forEach(btn => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await deletePaymentRemote(btn.dataset.id);
+        payments = payments.filter(p => p.id !== btn.dataset.id);
+        render();
+        renderBillHistory();
+        showToast('Payment removed');
+      } catch (e) {
+        btn.disabled = false;
+        showToast("Couldn't remove — check your connection");
+      }
+    }));
+  }
+
+  document.getElementById('closeBillHistory').addEventListener('click', () => billHistoryOverlay.classList.remove('open'));
+  billHistoryOverlay.addEventListener('click', (e) => { if (e.target === billHistoryOverlay) billHistoryOverlay.classList.remove('open'); });
+
+  // ---------- Bill sheet ----------
+  const billOverlay = document.getElementById('billOverlay');
+  const billNameInput = document.getElementById('billNameInput');
+  const billAmountInput = document.getElementById('billAmountInput');
+  const billFrequencyInput = document.getElementById('billFrequencyInput');
+  const billDateInput = document.getElementById('billDateInput');
+  const billEndInput = document.getElementById('billEndInput');
+  const billCategoryInput = document.getElementById('billCategoryInput');
+  const billSheetTitle = document.getElementById('billSheetTitle');
+  const deleteBillRow = document.getElementById('deleteBillRow');
+
+  function syncEndField() {
+    document.getElementById('billEndField').style.display = billFrequencyInput.value === 'once' ? 'none' : 'block';
+  }
+  billFrequencyInput.addEventListener('change', syncEndField);
+
+  // The same sheet adds bills and income sources.
+  function openBillSheet(id, kind) {
+    editingBillId = id || null;
+    const b = id ? bills.find(x => x.id === id) : null;
+    editingBillKind = b ? b.kind : (kind || 'bill');
+    const isIncome = editingBillKind === 'income';
+    const noun = isIncome ? 'income' : 'bill';
+
+    billSheetTitle.textContent = (b ? 'Edit ' : 'New ') + noun;
+    document.getElementById('billNameLabel').textContent = isIncome ? "Where's it from?" : "What's the bill?";
+    billNameInput.placeholder = isIncome ? 'e.g. Salary' : 'e.g. Council tax';
+    document.getElementById('billDateLabel').textContent = isIncome ? 'Pay date' : 'Due date';
+    document.getElementById('billCategoryField').style.display = isIncome ? 'none' : 'block';
+    document.getElementById('deleteBill').textContent = `Delete this ${noun}`;
+
+    const cats = Array.from(new Set(bills.filter(x => x.kind === 'bill').map(x => x.category).filter(Boolean)));
+    document.getElementById('billCategoryList').innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+
+    billNameInput.value = b ? b.name : '';
+    billAmountInput.value = b ? b.amount : '';
+    billFrequencyInput.value = b ? b.frequency : 'monthly';
+    billDateInput.value = b ? b.startDate : toISODate(startOfToday());
+    billEndInput.value = b ? (b.endDate || '') : '';
+    billCategoryInput.value = b ? (b.category || '') : '';
+    deleteBillRow.style.display = b ? 'flex' : 'none';
+    syncEndField();
+
+    billOverlay.classList.add('open');
+    setTimeout(() => billNameInput.focus(), 100);
+  }
+
+  function closeBillSheet() {
+    billOverlay.classList.remove('open');
+    editingBillId = null;
+  }
+
+  document.getElementById('openAddBill').addEventListener('click', () => openBillSheet(null));
+  document.getElementById('cancelBill').addEventListener('click', closeBillSheet);
+  billOverlay.addEventListener('click', (e) => { if (e.target === billOverlay) closeBillSheet(); });
+
+  document.getElementById('saveBill').addEventListener('click', async () => {
+    const name = billNameInput.value.trim();
+    const amount = parseFloat(billAmountInput.value);
+    const frequency = billFrequencyInput.value;
+    const startDate = billDateInput.value;
+    const isIncome = editingBillKind === 'income';
+    const endDate = frequency === 'once' ? null : (billEndInput.value || null);
+    const category = isIncome ? '' : billCategoryInput.value.trim();
+    if (!name) { showToast(isIncome ? 'Give it a name' : 'Give the bill a name'); return; }
+    if (!(amount > 0)) { showToast('Enter an amount'); return; }
+    if (!startDate) { showToast(isIncome ? 'Pick a pay date' : 'Pick a due date'); return; }
+    if (endDate && endDate < startDate) { showToast('Last payment must be after the first'); return; }
+
+    const fields = { name, amount, frequency, start_date: startDate, end_date: endDate, category: category || null };
+    const saveBtn = document.getElementById('saveBill');
+    saveBtn.disabled = true;
+    try {
+      if (editingBillId) {
+        await updateBillRemote(editingBillId, fields);
+        const b = bills.find(x => x.id === editingBillId);
+        Object.assign(b, { name, amount, frequency, startDate, endDate, category });
+      } else {
+        bills.push(await createBillRemote({ ...fields, kind: editingBillKind }));
+      }
+      render();
+      closeBillSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteBill').addEventListener('click', async () => {
+    if (!editingBillId) return;
+    const idToDelete = editingBillId;
+    try {
+      await deleteBillRemote(idToDelete);
+      bills = bills.filter(b => b.id !== idToDelete);
+      payments = payments.filter(p => p.billId !== idToDelete);
+      render();
+      closeBillSheet();
+      showToast('Deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- Navigation ----------
+  const VIEWS = ['overview', 'goals', 'bills'];
+
+  function showView() {
+    const hashView = location.hash.slice(1);
+    const view = VIEWS.includes(hashView) ? hashView : 'overview';
+    VIEWS.forEach(v => document.getElementById(v + 'View').classList.toggle('active', v === view));
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener('hashchange', showView);
+
+  // ---------- Auth ----------
+  const authScreen = document.getElementById('authScreen');
+  const appScreen = document.getElementById('appScreen');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authError = document.getElementById('authError');
+  const authSub = document.getElementById('authSub');
+  const authSubmit = document.getElementById('authSubmit');
+  const authToggle = document.getElementById('authToggle');
+
+  function showAuthError(msg) {
+    authError.textContent = msg;
+    authError.style.display = 'block';
+  }
+
+  authToggle.addEventListener('click', () => {
+    authMode = authMode === 'signin' ? 'signup' : 'signin';
+    authError.style.display = 'none';
+    if (authMode === 'signup') {
+      authSub.textContent = 'Create an account to start saving.';
+      authSubmit.textContent = 'Sign up';
+      authToggle.textContent = 'Already have an account? Sign in';
+    } else {
+      authSub.textContent = 'Sign in to see your goals.';
+      authSubmit.textContent = 'Sign in';
+      authToggle.textContent = "Need an account? Sign up";
+    }
+  });
+
+  authSubmit.addEventListener('click', async () => {
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    authError.style.display = 'none';
+    if (!email || !password) { showAuthError('Enter an email and password'); return; }
+    if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+
+    authSubmit.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (e) {
+      showAuthError(e.message || 'Something went wrong');
+    } finally {
+      authSubmit.disabled = false;
+    }
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  async function enterApp() {
+    authScreen.style.display = 'none';
+    appScreen.style.display = 'block';
+    showView();
+    document.getElementById('goalList').innerHTML = '<div class="empty">Loading your goals…</div>';
+    document.getElementById('billList').innerHTML = '<div class="empty">Loading your bills…</div>';
+    document.getElementById('overviewContent').innerHTML = '<div class="empty">Loading…</div>';
+    await Promise.all([loadGoals(), loadBills(), loadPayments()]);
+    render();
+  }
+
+  function showAuthScreen() {
+    appScreen.style.display = 'none';
+    authScreen.style.display = 'block';
+    authEmail.value = '';
+    authPassword.value = '';
+    authError.style.display = 'none';
+    goals = [];
+    bills = [];
+    payments = [];
+  }
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) { enterApp(); } else { showAuthScreen(); }
+  });
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) { await enterApp(); } else { showAuthScreen(); }
+  }
+  init();
+})();
+</script>
+
+</body>
+</html>
