@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ledger — Savings Goals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --paper: #F3F0E8;
+    --paper-raised: #FFFDF8;
+    --ink: #1F2A24;
+    --ink-soft: #5B6459;
+    --line: #D8D2C2;
+    --gold: #B8863B;
+    --gold-soft: #E7D5AE;
+    --green-deep: #22392F;
+    --danger: #A24A3B;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171D1A;
+      --paper-raised: #202823;
+      --ink: #EDE8DC;
+      --ink-soft: #A6ADA2;
+      --line: #34403A;
+      --gold: #D6A758;
+      --gold-soft: #4A3D25;
+      --green-deep: #DDE7DE;
+      --danger: #D98C79;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171D1A;
+    --paper-raised: #202823;
+    --ink: #EDE8DC;
+    --ink-soft: #A6ADA2;
+    --line: #34403A;
+    --gold: #D6A758;
+    --gold-soft: #4A3D25;
+    --green-deep: #DDE7DE;
+    --danger: #D98C79;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 28px 20px 100px;
+  }
+  header.top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-optical-sizing: auto;
+    font-size: 30px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    margin: 4px 0 20px;
+  }
+  .totals {
+    display: flex;
+    gap: 24px;
+    padding: 16px 18px;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    margin-bottom: 18px;
+  }
+  .totals .item .num {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 500;
+  }
+  .totals .item .lbl {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .chip-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 18px;
+  }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .chip {
+    flex-shrink: 0;
+    font-size: 11.5px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--line);
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+    white-space: nowrap;
+  }
+  .chip.active {
+    background: var(--green-deep);
+    border-color: var(--green-deep);
+    color: var(--paper);
+  }
+  .goal-list { display: flex; flex-direction: column; gap: 14px; }
+  .goal {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 18px 16px;
+    position: relative;
+  }
+  .goal.done { border-color: var(--gold); }
+  .goal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .goal-name {
+    font-family: 'Fraunces', serif;
+    font-size: 19px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .goal-head-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .badge-category {
+    display: inline-block;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .goal-amounts {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .goal-amounts .saved { color: var(--ink); font-weight: 500; }
+  .bar-track {
+    height: 8px;
+    background: var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--gold);
+    border-radius: 5px;
+    transition: width .4s ease;
+  }
+  .goal.done .bar-fill { background: var(--green-deep); }
+  .suggestion-line {
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 10px;
+  }
+  .suggestion-line.overdue { color: var(--danger); }
+  .goal-foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .pct { font-size: 11.5px; color: var(--ink-soft); }
+  .goal-actions { display: flex; gap: 8px; align-items: center; }
+  button {
+    font-family: 'IBM Plex Mono', monospace;
+    cursor: pointer;
+    border: none;
+    background: none;
+  }
+  .btn-small {
+    font-size: 11.5px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .btn-small:active { transform: scale(0.97); }
+  .btn-icon {
+    font-size: 13px;
+    padding: 6px 8px;
+    color: var(--ink-soft);
+    border-radius: 6px;
+  }
+  .btn-icon:disabled { opacity: 0.25; }
+  .btn-icon:hover:not(:disabled) { background: var(--paper); }
+  .add-goal-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 10px;
+    border: 1.5px dashed var(--line);
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    background: transparent;
+  }
+  .add-goal-btn:active { background: var(--paper-raised); }
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-soft);
+  }
+  .empty .big { font-family: 'Fraunces', serif; font-size: 20px; color: var(--ink); margin-bottom: 6px; }
+
+  /* Modal */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(20, 24, 20, 0.45);
+    display: flex; align-items: flex-end; justify-content: center;
+    z-index: 50;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease;
+  }
+  .overlay.open { opacity: 1; pointer-events: auto; }
+  .sheet {
+    background: var(--paper-raised);
+    width: 100%; max-width: 480px;
+    max-height: 82vh;
+    overflow-y: auto;
+    border-radius: 16px 16px 0 0;
+    padding: 22px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+    transform: translateY(20px);
+    transition: transform .25s ease;
+  }
+  .overlay.open .sheet { transform: translateY(0); }
+  .sheet h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0 0 16px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+  }
+  .field input:focus {
+    outline: 2px solid var(--gold);
+    outline-offset: 1px;
+  }
+  .field-hint {
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    margin-top: 5px;
+  }
+  .sheet-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .btn-primary {
+    flex: 1;
+    padding: 13px;
+    border-radius: 8px;
+    background: var(--green-deep);
+    color: var(--paper);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-primary:active { opacity: 0.85; }
+  .btn-cancel {
+    padding: 13px 16px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 14px;
+  }
+  .btn-danger-text { color: var(--danger); }
+  .toast {
+    position: fixed;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--green-deep);
+    color: var(--paper);
+    padding: 10px 18px;
+    border-radius: 20px;
+    font-size: 12.5px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+    z-index: 60;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-main .amt { font-size: 15px; font-weight: 500; }
+  .history-main .amt.negative { color: var(--danger); }
+  .history-main .meta { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+  .history-empty { text-align: center; color: var(--ink-soft); padding: 30px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="authScreen" style="display:none; max-width: 380px; padding-top: 80px;">
+  <h1 style="margin-bottom: 6px;">Ledger</h1>
+  <p class="sub" id="authSub">Sign in to see your goals.</p>
+  <div class="field">
+    <label for="authEmail">Email</label>
+    <input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+  </div>
+  <div class="field">
+    <label for="authPassword">Password</label>
+    <input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••">
+  </div>
+  <div id="authError" style="color: var(--danger); font-size: 12.5px; margin-bottom: 12px; display:none;"></div>
+  <button class="btn-primary" id="authSubmit" style="width:100%; margin-bottom: 10px;">Sign in</button>
+  <button class="btn-cancel" id="authToggle" style="width:100%;">Need an account? Sign up</button>
+</div>
+
+<div class="wrap" id="appScreen" style="display:none;">
+  <header class="top">
+    <h1>Ledger</h1>
+    <button class="btn-icon" id="signOutBtn">sign out</button>
+  </header>
+  <p class="sub">What you're saving for, and how far you've come.</p>
+
+  <div class="totals" id="totals"></div>
+  <div class="chip-row" id="categoryChips"></div>
+  <div class="goal-list" id="goalList"></div>
+
+  <button class="add-goal-btn" id="openAddGoal">+ New goal</button>
+</div>
+
+<!-- Add/Edit Goal Sheet -->
+<div class="overlay" id="goalOverlay">
+  <div class="sheet">
+    <h2 id="goalSheetTitle">New goal</h2>
+    <div class="field">
+      <label for="goalNameInput">What are you saving for?</label>
+      <input id="goalNameInput" type="text" placeholder="e.g. New camera" maxlength="60">
+    </div>
+    <div class="field">
+      <label for="goalTargetInput">Target amount</label>
+      <input id="goalTargetInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+    </div>
+    <div class="field">
+      <label for="goalCategoryInput">Category (optional)</label>
+      <input id="goalCategoryInput" type="text" placeholder="e.g. Travel" maxlength="30" list="categoryList">
+      <datalist id="categoryList"></datalist>
+    </div>
+    <div class="field">
+      <label for="goalDateInput">Target date (optional)</label>
+      <input id="goalDateInput" type="date">
+      <div class="field-hint">Set this and I'll work out how much to save each month.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelGoal">Cancel</button>
+      <button class="btn-primary" id="saveGoal">Save goal</button>
+    </div>
+    <div class="sheet-actions" id="deleteGoalRow" style="display:none; margin-top: 4px;">
+      <button class="btn-cancel btn-danger-text" id="deleteGoal" style="flex:1; text-align:left;">Delete this goal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Deposit Sheet -->
+<div class="overlay" id="depositOverlay">
+  <div class="sheet">
+    <h2 id="depositSheetTitle">Add to <span id="depositGoalName"></span></h2>
+    <div class="field">
+      <label for="depositAmountInput">Amount</label>
+      <input id="depositAmountInput" type="number" inputmode="decimal" placeholder="0" step="0.01">
+      <div class="field-hint">Enter a negative number to correct or withdraw.</div>
+    </div>
+    <div class="field">
+      <label for="depositNoteInput">Note (optional)</label>
+      <input id="depositNoteInput" type="text" placeholder="e.g. birthday money" maxlength="60">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelDeposit">Cancel</button>
+      <button class="btn-primary" id="saveDeposit">Add</button>
+    </div>
+    <div class="sheet-actions" id="deleteDepositRow" style="display:none; margin-top: 4px;">
+      <button class="btn-cancel btn-danger-text" id="deleteDeposit" style="flex:1; text-align:left;">Delete this entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Sheet -->
+<div class="overlay" id="historyOverlay">
+  <div class="sheet">
+    <h2>History — <span id="historyGoalName"></span></h2>
+    <div id="historyList"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="closeHistory" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  const SUPABASE_URL = 'https://vpbrurxowgneplxpwkkv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwYnJ1cnhvd2duZXBseHB3a2t2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MzAwNzcsImV4cCI6MjEwNjEwNjA3N30.3yq74-z1tkQDNA8BB6JFG3_yFwLN-yjHz_7WJyrAqDs';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let goals = [];
+  let editingGoalId = null;
+  let depositGoalId = null;
+  let editingDepositId = null;
+  let historyGoalId = null;
+  let activeCategory = 'All';
+  let authMode = 'signin';
+
+  // ---------- Mapping ----------
+  function fromGoalRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      target: Number(row.target),
+      saved: Number(row.saved),
+      category: row.category || '',
+      targetDate: row.target_date || null,
+      sortOrder: row.sort_order == null ? 0 : Number(row.sort_order),
+      createdAt: row.created_at
+    };
+  }
+  function fromDepositRow(row) {
+    return {
+      id: row.id,
+      goalId: row.goal_id,
+      amount: Number(row.amount),
+      note: row.note || '',
+      createdAt: row.created_at
+    };
+  }
+
+  // ---------- Goals CRUD ----------
+  async function loadGoals() {
+    try {
+      const { data, error } = await sb.from('goals').select('*').order('sort_order', { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      goals = data.map(fromGoalRow);
+    } catch (e) {
+      showToast("Couldn't load — check your connection");
+      goals = [];
+    }
+  }
+
+  async function createGoalRemote(name, target, category, targetDate) {
+    const nextOrder = goals.length ? Math.max(...goals.map(g => g.sortOrder)) + 1 : 1;
+    const { data, error } = await sb.from('goals').insert([{
+      name, target, saved: 0,
+      category: category || null,
+      target_date: targetDate || null,
+      sort_order: nextOrder
+    }]).select();
+    if (error) throw error;
+    return fromGoalRow(data[0]);
+  }
+
+  async function updateGoalRemote(id, fields) {
+    const { error } = await sb.from('goals').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deleteGoalRemote(id) {
+    const { error } = await sb.from('goals').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Deposits CRUD ----------
+  async function loadDeposits(goalId) {
+    const { data, error } = await sb.from('deposits').select('*').eq('goal_id', goalId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map(fromDepositRow);
+  }
+
+  async function createDepositRemote(goalId, amount, note) {
+    const { data, error } = await sb.from('deposits').insert([{ goal_id: goalId, amount, note: note || null }]).select();
+    if (error) throw error;
+    return fromDepositRow(data[0]);
+  }
+
+  async function updateDepositRemote(id, fields) {
+    const { error } = await sb.from('deposits').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
+  async function deleteDepositRemote(id) {
+    const { error } = await sb.from('deposits').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Helpers ----------
+  function formatMoney(n) {
+    const sign = n < 0 ? '-' : '';
+    return sign + '$' + Math.abs(Number(n)).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  function monthlyNeeded(goal) {
+    if (!goal.targetDate) return null;
+    const remaining = goal.target - goal.saved;
+    if (remaining <= 0) return null;
+    const today = new Date();
+    const due = new Date(goal.targetDate + 'T00:00:00');
+    const diffMs = due - today;
+    if (diffMs <= 0) {
+      return { overdue: true, remaining };
+    }
+    const monthsLeft = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
+    const monthly = remaining / monthsLeft;
+    return { monthly, dueLabel: due.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) };
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ---------- Category chips ----------
+  function renderChips() {
+    const row = document.getElementById('categoryChips');
+    const cats = Array.from(new Set(goals.map(g => g.category).filter(Boolean)));
+    if (cats.length === 0) {
+      row.style.display = 'none';
+      activeCategory = 'All';
+      return;
+    }
+    row.style.display = 'flex';
+    const all = ['All', ...cats];
+    row.innerHTML = all.map(c => `<button class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+    row.querySelectorAll('.chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCategory = btn.dataset.cat;
+        render();
+      });
+    });
+  }
+
+  // ---------- Main render ----------
+  function render() {
+    renderChips();
+    const list = document.getElementById('goalList');
+    const totalsEl = document.getElementById('totals');
+
+    if (goals.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="big">No goals yet</div>Tap "New goal" to start saving toward something.</div>';
+      totalsEl.style.display = 'none';
+      return;
+    }
+
+    totalsEl.style.display = 'flex';
+    const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
+    const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+    totalsEl.innerHTML = `
+      <div class="item">
+        <div class="num">${formatMoney(totalSaved)}</div>
+        <div class="lbl">saved</div>
+      </div>
+      <div class="item">
+        <div class="num">${formatMoney(totalTarget)}</div>
+        <div class="lbl">across ${goals.length} goal${goals.length === 1 ? '' : 's'}</div>
+      </div>
+    `;
+
+    const displayed = activeCategory === 'All' ? goals : goals.filter(g => g.category === activeCategory);
+    const showReorder = activeCategory === 'All';
+
+    if (displayed.length === 0) {
+      list.innerHTML = '<div class="empty">No goals in this category.</div>';
+      return;
+    }
+
+    list.innerHTML = displayed.map((g, idx) => {
+      const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
+      const done = g.saved >= g.target && g.target > 0;
+      const suggestion = monthlyNeeded(g);
+      let suggestionHtml = '';
+      if (suggestion && suggestion.overdue) {
+        suggestionHtml = `<div class="suggestion-line overdue">Target date passed — ${formatMoney(suggestion.remaining)} still needed</div>`;
+      } else if (suggestion) {
+        suggestionHtml = `<div class="suggestion-line">Save ${formatMoney(suggestion.monthly)}/mo to hit this by ${suggestion.dueLabel}</div>`;
+      }
+      const reorderHtml = showReorder ? `
+        <button class="btn-icon reorder-up" data-id="${g.id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
+        <button class="btn-icon reorder-down" data-id="${g.id}" ${idx === displayed.length - 1 ? 'disabled' : ''}>▼</button>
+      ` : '';
+      return `
+        <div class="goal ${done ? 'done' : ''}" data-id="${g.id}">
+          <div class="goal-head">
+            <div class="goal-name">${done ? '✓' : ''} ${escapeHtml(g.name)}</div>
+            <div class="goal-head-actions">
+              ${reorderHtml}
+              <button class="btn-icon edit-goal" data-id="${g.id}">edit</button>
+            </div>
+          </div>
+          ${g.category ? `<div class="badge-category">${escapeHtml(g.category)}</div>` : ''}
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          ${suggestionHtml}
+          <div class="goal-foot">
+            <div class="goal-amounts"><span class="saved">${formatMoney(g.saved)}</span> of ${formatMoney(g.target)}</div>
+            <div class="goal-actions">
+              <span class="pct">${pct.toFixed(0)}%</span>
+              <button class="btn-small history-btn" data-id="${g.id}">History</button>
+              ${!done ? `<button class="btn-small add-deposit" data-id="${g.id}">+ Add</button>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.add-deposit').forEach(btn => btn.addEventListener('click', () => openDepositSheet(btn.dataset.id)));
+    list.querySelectorAll('.edit-goal').forEach(btn => btn.addEventListener('click', () => openGoalSheet(btn.dataset.id)));
+    list.querySelectorAll('.history-btn').forEach(btn => btn.addEventListener('click', () => openHistorySheet(btn.dataset.id)));
+    list.querySelectorAll('.reorder-up').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, -1)));
+    list.querySelectorAll('.reorder-down').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, 1)));
+  }
+
+  // ---------- Reordering ----------
+  async function moveGoal(id, dir) {
+    const idx = goals.findIndex(g => g.id === id);
+    const otherIdx = idx + dir;
+    if (idx === -1 || otherIdx < 0 || otherIdx >= goals.length) return;
+    const a = goals[idx], b = goals[otherIdx];
+    const aOrder = a.sortOrder, bOrder = b.sortOrder;
+    try {
+      await Promise.all([
+        updateGoalRemote(a.id, { sort_order: bOrder }),
+        updateGoalRemote(b.id, { sort_order: aOrder })
+      ]);
+      a.sortOrder = bOrder;
+      b.sortOrder = aOrder;
+      goals.sort((x, y) => x.sortOrder - y.sortOrder);
+      render();
+    } catch (e) {
+      showToast("Couldn't reorder — check your connection");
+    }
+  }
+
+  // ---------- Category datalist ----------
+  function refreshCategoryDatalist() {
+    const dl = document.getElementById('categoryList');
+    const cats = Array.from(new Set(goals.map(g => g.category).filter(Boolean)));
+    dl.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+  }
+
+  // ---------- Goal sheet ----------
+  const goalOverlay = document.getElementById('goalOverlay');
+  const goalNameInput = document.getElementById('goalNameInput');
+  const goalTargetInput = document.getElementById('goalTargetInput');
+  const goalCategoryInput = document.getElementById('goalCategoryInput');
+  const goalDateInput = document.getElementById('goalDateInput');
+  const goalSheetTitle = document.getElementById('goalSheetTitle');
+  const deleteGoalRow = document.getElementById('deleteGoalRow');
+
+  function openGoalSheet(id) {
+    editingGoalId = id || null;
+    refreshCategoryDatalist();
+    if (id) {
+      const g = goals.find(x => x.id === id);
+      goalSheetTitle.textContent = 'Edit goal';
+      goalNameInput.value = g.name;
+      goalTargetInput.value = g.target;
+      goalCategoryInput.value = g.category || '';
+      goalDateInput.value = g.targetDate || '';
+      deleteGoalRow.style.display = 'flex';
+    } else {
+      goalSheetTitle.textContent = 'New goal';
+      goalNameInput.value = '';
+      goalTargetInput.value = '';
+      goalCategoryInput.value = '';
+      goalDateInput.value = '';
+      deleteGoalRow.style.display = 'none';
+    }
+    goalOverlay.classList.add('open');
+    setTimeout(() => goalNameInput.focus(), 100);
+  }
+
+  function closeGoalSheet() {
+    goalOverlay.classList.remove('open');
+    editingGoalId = null;
+  }
+
+  document.getElementById('openAddGoal').addEventListener('click', () => openGoalSheet(null));
+  document.getElementById('cancelGoal').addEventListener('click', closeGoalSheet);
+  goalOverlay.addEventListener('click', (e) => { if (e.target === goalOverlay) closeGoalSheet(); });
+
+  document.getElementById('saveGoal').addEventListener('click', async () => {
+    const name = goalNameInput.value.trim();
+    const target = parseFloat(goalTargetInput.value);
+    const category = goalCategoryInput.value.trim();
+    const targetDate = goalDateInput.value || null;
+    if (!name) { showToast('Give the goal a name'); return; }
+    if (!(target > 0)) { showToast('Enter a target amount'); return; }
+
+    const saveBtn = document.getElementById('saveGoal');
+    saveBtn.disabled = true;
+    try {
+      if (editingGoalId) {
+        await updateGoalRemote(editingGoalId, { name, target, category: category || null, target_date: targetDate });
+        const g = goals.find(x => x.id === editingGoalId);
+        g.name = name; g.target = target; g.category = category; g.targetDate = targetDate;
+      } else {
+        const newGoal = await createGoalRemote(name, target, category, targetDate);
+        goals.push(newGoal);
+      }
+      render();
+      closeGoalSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteGoal').addEventListener('click', async () => {
+    if (!editingGoalId) return;
+    const idToDelete = editingGoalId;
+    try {
+      await deleteGoalRemote(idToDelete);
+      goals = goals.filter(g => g.id !== idToDelete);
+      render();
+      closeGoalSheet();
+      showToast('Goal deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- Deposit sheet (add + edit) ----------
+  const depositOverlay = document.getElementById('depositOverlay');
+  const depositAmountInput = document.getElementById('depositAmountInput');
+  const depositNoteInput = document.getElementById('depositNoteInput');
+  const depositGoalName = document.getElementById('depositGoalName');
+  const depositSheetTitle = document.getElementById('depositSheetTitle');
+  const deleteDepositRow = document.getElementById('deleteDepositRow');
+  let editingDepositOriginalAmount = 0;
+
+  function openDepositSheet(goalId) {
+    depositGoalId = goalId;
+    editingDepositId = null;
+    const g = goals.find(x => x.id === goalId);
+    depositSheetTitle.innerHTML = 'Add to <span id="depositGoalName">' + escapeHtml(g.name) + '</span>';
+    depositAmountInput.value = '';
+    depositNoteInput.value = '';
+    deleteDepositRow.style.display = 'none';
+    depositOverlay.classList.add('open');
+    setTimeout(() => depositAmountInput.focus(), 100);
+  }
+
+  function openEditDepositSheet(dep, goalId) {
+    depositGoalId = goalId;
+    editingDepositId = dep.id;
+    editingDepositOriginalAmount = dep.amount;
+    const g = goals.find(x => x.id === goalId);
+    depositSheetTitle.innerHTML = 'Edit entry — <span>' + escapeHtml(g.name) + '</span>';
+    depositAmountInput.value = dep.amount;
+    depositNoteInput.value = dep.note || '';
+    deleteDepositRow.style.display = 'flex';
+    depositOverlay.classList.add('open');
+    setTimeout(() => depositAmountInput.focus(), 100);
+  }
+
+  function closeDepositSheet() {
+    depositOverlay.classList.remove('open');
+    depositGoalId = null;
+    editingDepositId = null;
+  }
+
+  document.getElementById('cancelDeposit').addEventListener('click', closeDepositSheet);
+  depositOverlay.addEventListener('click', (e) => { if (e.target === depositOverlay) closeDepositSheet(); });
+
+  document.getElementById('saveDeposit').addEventListener('click', async () => {
+    const amount = parseFloat(depositAmountInput.value);
+    const note = depositNoteInput.value.trim();
+    if (!amount || amount === 0) { showToast('Enter an amount'); return; }
+    const g = goals.find(x => x.id === depositGoalId);
+    const saveBtn = document.getElementById('saveDeposit');
+    saveBtn.disabled = true;
+    try {
+      if (editingDepositId) {
+        const diff = amount - editingDepositOriginalAmount;
+        await updateDepositRemote(editingDepositId, { amount, note: note || null });
+        await updateGoalRemote(g.id, { saved: g.saved + diff });
+        g.saved += diff;
+        showToast('Entry updated');
+      } else {
+        await createDepositRemote(g.id, amount, note);
+        await updateGoalRemote(g.id, { saved: g.saved + amount });
+        g.saved += amount;
+        showToast(`${amount > 0 ? 'Added' : 'Adjusted'} ${formatMoney(amount)} — ${g.name}`);
+      }
+      render();
+      closeDepositSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteDeposit').addEventListener('click', async () => {
+    if (!editingDepositId) return;
+    const g = goals.find(x => x.id === depositGoalId);
+    try {
+      await deleteDepositRemote(editingDepositId);
+      await updateGoalRemote(g.id, { saved: g.saved - editingDepositOriginalAmount });
+      g.saved -= editingDepositOriginalAmount;
+      render();
+      closeDepositSheet();
+      showToast('Entry deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- History sheet ----------
+  const historyOverlay = document.getElementById('historyOverlay');
+  const historyGoalName = document.getElementById('historyGoalName');
+  const historyList = document.getElementById('historyList');
+
+  async function openHistorySheet(goalId) {
+    historyGoalId = goalId;
+    const g = goals.find(x => x.id === goalId);
+    historyGoalName.textContent = g.name;
+    historyList.innerHTML = '<div class="history-empty">Loading…</div>';
+    historyOverlay.classList.add('open');
+    try {
+      const deposits = await loadDeposits(goalId);
+      if (deposits.length === 0) {
+        historyList.innerHTML = '<div class="history-empty">No entries yet.</div>';
+        return;
+      }
+      historyList.innerHTML = deposits.map(d => `
+        <div class="history-item" data-id="${d.id}">
+          <div class="history-main">
+            <div class="amt ${d.amount < 0 ? 'negative' : ''}">${d.amount > 0 ? '+' : ''}${formatMoney(d.amount)}</div>
+            <div class="meta">${formatDate(d.createdAt)}${d.note ? ' · ' + escapeHtml(d.note) : ''}</div>
+          </div>
+          <button class="btn-icon edit-deposit" data-id="${d.id}">edit</button>
+        </div>
+      `).join('');
+      historyList.querySelectorAll('.edit-deposit').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const dep = deposits.find(x => x.id === btn.dataset.id);
+          historyOverlay.classList.remove('open');
+          openEditDepositSheet(dep, goalId);
+        });
+      });
+    } catch (e) {
+      historyList.innerHTML = '<div class="history-empty">Couldn\'t load history.</div>';
+    }
+  }
+
+  document.getElementById('closeHistory').addEventListener('click', () => {
+    historyOverlay.classList.remove('open');
+  });
+  historyOverlay.addEventListener('click', (e) => { if (e.target === historyOverlay) historyOverlay.classList.remove('open'); });
+
+  // ---------- Auth ----------
+  const authScreen = document.getElementById('authScreen');
+  const appScreen = document.getElementById('appScreen');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
+  const authError = document.getElementById('authError');
+  const authSub = document.getElementById('authSub');
+  const authSubmit = document.getElementById('authSubmit');
+  const authToggle = document.getElementById('authToggle');
+
+  function showAuthError(msg) {
+    authError.textContent = msg;
+    authError.style.display = 'block';
+  }
+
+  authToggle.addEventListener('click', () => {
+    authMode = authMode === 'signin' ? 'signup' : 'signin';
+    authError.style.display = 'none';
+    if (authMode === 'signup') {
+      authSub.textContent = 'Create an account to start saving.';
+      authSubmit.textContent = 'Sign up';
+      authToggle.textContent = 'Already have an account? Sign in';
+    } else {
+      authSub.textContent = 'Sign in to see your goals.';
+      authSubmit.textContent = 'Sign in';
+      authToggle.textContent = "Need an account? Sign up";
+    }
+  });
+
+  authSubmit.addEventListener('click', async () => {
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    authError.style.display = 'none';
+    if (!email || !password) { showAuthError('Enter an email and password'); return; }
+    if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+
+    authSubmit.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+      } else {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (e) {
+      showAuthError(e.message || 'Something went wrong');
+    } finally {
+      authSubmit.disabled = false;
+    }
+  });
+
+  document.getElementById('signOutBtn').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  async function enterApp() {
+    authScreen.style.display = 'none';
+    appScreen.style.display = 'block';
+    const list = document.getElementById('goalList');
+    list.innerHTML = '<div class="empty">Loading your goals…</div>';
+    await loadGoals();
+    render();
+  }
+
+  function showAuthScreen() {
+    appScreen.style.display = 'none';
+    authScreen.style.display = 'block';
+    authEmail.value = '';
+    authPassword.value = '';
+    authError.style.display = 'none';
+    goals = [];
+  }
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) { enterApp(); } else { showAuthScreen(); }
+  });
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) { await enterApp(); } else { showAuthScreen(); }
+  }
+  init();
+})();
+</script>
+
+</body>
+</html>
