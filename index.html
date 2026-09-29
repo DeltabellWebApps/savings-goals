@@ -612,6 +612,22 @@
   </div>
 </div>
 
+<!-- Income Receipt Sheet -->
+<div class="overlay" id="incomeReceiptOverlay">
+  <div class="sheet">
+    <h2>Log income received</h2>
+    <div class="field">
+      <label for="incomeReceiptAmount">Amount actually received</label>
+      <input id="incomeReceiptAmount" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+      <div class="field-hint">Pre-filled with your estimated amount — change it to what actually came in.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelIncomeReceipt">Cancel</button>
+      <button class="btn-primary" id="saveIncomeReceipt">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- History Sheet -->
 <div class="overlay" id="historyOverlay">
   <div class="sheet">
@@ -894,6 +910,34 @@
     return list
       .filter(b => !b.endDate || parseLocalDate(b.endDate) >= today)
       .reduce((s, b) => s + b.amount * PER_MONTH[b.frequency], 0);
+  }
+
+  // ---------- Pay period ----------
+  // Derives the current pay period from the primary income entry (first recurring one).
+  // Period = [last payday on or before today, day before the next payday].
+  function currentPayPeriod(incomeList) {
+    const primary = incomeList.find(b => b.frequency !== 'once');
+    if (!primary) return null;
+    const today = startOfToday();
+    // Search from 14 months ago so we always find the bracket around today.
+    const searchFrom = new Date(today.getFullYear(), today.getMonth() - 14, 1);
+    let periodStart = null;
+    let periodEnd = null;
+    for (const d of occurrencesFrom(primary, searchFrom)) {
+      if (d > today) {
+        periodEnd = addDays(d, -1);
+        break;
+      }
+      periodStart = d;
+    }
+    if (!periodStart) return null;
+    // If no next occurrence found (e.g. income has ended), show 31 days ahead.
+    return { start: periodStart, end: periodEnd || addDays(today, 31), income: primary };
+  }
+
+  // Income received for a given period start date (stored as a bill_payment).
+  function incomeReceivedFor(incomeEntry, periodStart) {
+    return paidIndex.get(incomeEntry.id + '|' + toISODate(periodStart)) || null;
   }
 
   function shortDate(d) {
@@ -1385,97 +1429,152 @@
     const el = document.getElementById('overviewContent');
     const today = startOfToday();
     const billsOnly = bills.filter(b => b.kind === 'bill');
-    const income = bills.filter(b => b.kind === 'income');
+    const incomeList = bills.filter(b => b.kind === 'income');
 
-    // Monthly picture
-    const incomeMonthly = monthlyAverage(income, today);
-    const billsMonthly = monthlyAverage(billsOnly, today);
-    const leftOver = incomeMonthly - billsMonthly;
-    const goalsMonthly = goals.reduce((s, g) => {
-      const m = monthlyNeeded(g);
-      return s + (m && !m.overdue ? m.monthly : 0);
-    }, 0);
+    const period = currentPayPeriod(incomeList);
     const neg = n => n < 0 ? 'negative' : '';
-    let html = `
-      <div class="statement">
-        <div class="statement-row">
-          <div>Income<span class="meta">${income.length ? 'monthly average' : 'none added yet'}</span></div>
-          <div class="amt">${formatMoney(incomeMonthly)}</div>
-        </div>
-        <div class="statement-row">
-          <div>Bills<span class="meta">monthly average</span></div>
-          <div class="amt">−${formatMoney(billsMonthly)}</div>
-        </div>
-        <div class="statement-row total">
-          <div>Left over</div>
-          <div class="amt ${neg(leftOver)}">${formatMoney(leftOver)}</div>
-        </div>
-        ${goalsMonthly > 0 ? `
-        <div class="statement-row">
-          <div>Goals<span class="meta">to hit your target dates</span></div>
-          <div class="amt">−${formatMoney(goalsMonthly)}</div>
-        </div>
-        <div class="statement-row total">
-          <div>Free to spend</div>
-          <div class="amt ${neg(leftOver - goalsMonthly)}">${formatMoney(leftOver - goalsMonthly)}</div>
-        </div>` : ''}
-      </div>
-    `;
+    let html = '';
 
-    // This calendar month's bills: paid vs total
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    let monthPaid = 0, monthTotal = 0, monthOverdue = 0;
-    billsOnly.forEach(b => {
-      const from = trackFrom(b) > monthStart ? trackFrom(b) : monthStart;
-      occurrencesBetween(b, from, monthEnd).forEach(d => {
-        const p = paymentFor(b, d);
-        monthTotal += p ? p.amount : b.amount;
-        if (p) monthPaid += p.amount;
-        else if (d < today) monthOverdue++;
+    if (period) {
+      // ---------- Pay period summary ----------
+      const periodLabel = `${shortDate(period.start)} → ${shortDate(period.end)}`;
+      const received = incomeReceivedFor(period.income, period.start);
+      const incomeAmount = received ? received.amount : period.income.amount;
+      const incomeNote = received
+        ? `received ${shortDate(new Date(received.paidAt))}`
+        : 'estimated · tap to log actual';
+
+      let periodBillsTotal = 0;
+      billsOnly.forEach(b => {
+        occurrencesBetween(b, period.start, period.end).forEach(d => {
+          const p = paymentFor(b, d);
+          periodBillsTotal += p ? p.amount : b.amount;
+        });
       });
-    });
-    if (monthTotal > 0) {
-      const pct = Math.min(100, (monthPaid / monthTotal) * 100);
-      const monthName = today.toLocaleDateString('en-GB', { month: 'long' });
-      let note = monthPaid >= monthTotal ? 'All paid for this month.' : `${formatMoney(monthTotal - monthPaid)} still to pay.`;
-      if (monthOverdue) note += ` <span style="color: var(--danger)">${monthOverdue} overdue.</span>`;
+
+      const leftOver = incomeAmount - periodBillsTotal;
+      const goalsMonthly = goals.reduce((s, g) => {
+        const m = monthlyNeeded(g);
+        return s + (m && !m.overdue ? m.monthly : 0);
+      }, 0);
+
       html += `
-        <h3 class="section-title">${monthName} bills</h3>
+        <h3 class="section-title" style="margin-top: 0;">Pay period <span style="color: var(--ink-soft); font-weight: 400; font-size: 13px;">${periodLabel}</span></h3>
         <div class="statement">
-          <div class="month-head"><span>${formatMoney(monthPaid)} paid</span><span class="amt">of ${formatMoney(monthTotal)}</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
-          <div class="bill-due" style="padding-bottom: 14px;">${note}</div>
+          <div class="statement-row">
+            <div>Income<span class="meta">${incomeNote}</span></div>
+            <div class="row-end">
+              <div class="amt">+${formatMoney(incomeAmount)}</div>
+              ${received
+                ? `<button class="btn-icon undo-income-receipt" data-id="${received.id}">undo</button>`
+                : `<button class="btn-small mark-income-received" data-income-id="${period.income.id}" data-date="${toISODate(period.start)}" data-amount="${period.income.amount}">Log actual</button>`
+              }
+            </div>
+          </div>
+          <div class="statement-row">
+            <div>Bills<span class="meta">due this period</span></div>
+            <div class="amt">−${formatMoney(periodBillsTotal)}</div>
+          </div>
+          <div class="statement-row total">
+            <div>Left over</div>
+            <div class="amt ${neg(leftOver)}">${formatMoney(leftOver)}</div>
+          </div>
+          ${goalsMonthly > 0 ? `
+          <div class="statement-row">
+            <div>Goals<span class="meta">to hit your target dates</span></div>
+            <div class="amt">−${formatMoney(goalsMonthly)}</div>
+          </div>
+          <div class="statement-row total">
+            <div>Free to spend</div>
+            <div class="amt ${neg(leftOver - goalsMonthly)}">${formatMoney(leftOver - goalsMonthly)}</div>
+          </div>` : ''}
+        </div>
+      `;
+
+      // ---------- Bills in this period ----------
+      let periodPaid = 0, periodTotal = 0, periodOverdue = 0;
+      billsOnly.forEach(b => {
+        occurrencesBetween(b, period.start, period.end).forEach(d => {
+          const p = paymentFor(b, d);
+          const amt = p ? p.amount : b.amount;
+          periodTotal += amt;
+          if (p) periodPaid += amt;
+          else if (d < today) periodOverdue++;
+        });
+      });
+
+      if (periodTotal > 0) {
+        const pct = Math.min(100, (periodPaid / periodTotal) * 100);
+        let note = periodPaid >= periodTotal ? 'All paid this period.' : `${formatMoney(periodTotal - periodPaid)} still to pay.`;
+        if (periodOverdue) note += ` <span style="color: var(--danger)">${periodOverdue} overdue.</span>`;
+        html += `
+          <h3 class="section-title">Bills this period</h3>
+          <div class="statement">
+            <div class="month-head"><span>${formatMoney(periodPaid)} paid</span><span class="amt">of ${formatMoney(periodTotal)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+            <div class="bill-due" style="padding-bottom: 14px;">${note}</div>
+          </div>
+        `;
+      }
+
+      // ---------- Coming up in this period ----------
+      const items = [];
+      billsOnly.forEach(b => unpaidBetween(b, period.start, period.end).forEach(d => items.push({ b, d, isIncome: false })));
+      if (!received) {
+        const nextPay = nextDue(period.income);
+        if (nextPay && nextPay >= today && nextPay <= period.end) {
+          items.push({ b: period.income, d: nextPay, isIncome: true });
+        }
+      }
+      items.sort((x, y) => x.d - y.d);
+
+      html += `<h3 class="section-title">Coming up</h3><div class="statement">`;
+      html += items.length === 0
+        ? '<div class="statement-empty">Nothing left unpaid this period.</div>'
+        : items.map(({ b, d, isIncome }) => {
+          const overdue = !isIncome && d < today;
+          const when = overdue
+            ? `Overdue · ${shortDate(d)}`
+            : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          return `
+            <div class="statement-row">
+              <div>${escapeHtml(b.name)}<span class="meta when ${overdue ? 'overdue' : ''}">${when}</span></div>
+              <div class="row-end">
+                <div class="amt">${isIncome ? '+' : ''}${formatMoney(b.amount)}</div>
+                ${isIncome ? '' : `<button class="btn-small mark-paid" data-id="${b.id}" data-date="${toISODate(d)}">Paid</button>`}
+              </div>
+            </div>
+          `;
+        }).join('');
+      html += '</div>';
+
+    } else {
+      // No income set up — fallback monthly average view
+      const incomeMonthly = monthlyAverage(incomeList, today);
+      const billsMonthly = monthlyAverage(billsOnly, today);
+      const leftOver = incomeMonthly - billsMonthly;
+      html += `
+        <div class="statement">
+          <div class="statement-row">
+            <div>Income<span class="meta">${incomeList.length ? 'monthly average' : 'none added yet'}</span></div>
+            <div class="amt">${formatMoney(incomeMonthly)}</div>
+          </div>
+          <div class="statement-row">
+            <div>Bills<span class="meta">monthly average</span></div>
+            <div class="amt">−${formatMoney(billsMonthly)}</div>
+          </div>
+          <div class="statement-row total">
+            <div>Left over</div>
+            <div class="amt ${neg(leftOver)}">${formatMoney(leftOver)}</div>
+          </div>
         </div>
       `;
     }
 
-    // Coming up: unpaid bills (including overdue) and income in the next 14 days
-    const horizon = addDays(today, 14);
-    const items = [];
-    billsOnly.forEach(b => unpaidBetween(b, trackFrom(b), horizon).forEach(d => items.push({ b, d, isIncome: false })));
-    income.forEach(b => occurrencesBetween(b, today, horizon).forEach(d => items.push({ b, d, isIncome: true })));
-    items.sort((x, y) => x.d - y.d);
-    html += `<h3 class="section-title">Next two weeks</h3><div class="statement">`;
-    html += items.length === 0 ? '<div class="statement-empty">Nothing due in the next two weeks.</div>' : items.map(({ b, d, isIncome }) => {
-      const overdue = !isIncome && d < today;
-      const when = overdue ? `Overdue · ${shortDate(d)}` : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-      return `
-        <div class="statement-row">
-          <div>${escapeHtml(b.name)}<span class="meta when ${overdue ? 'overdue' : ''}">${when}</span></div>
-          <div class="row-end">
-            <div class="amt">${isIncome ? '+' : ''}${formatMoney(b.amount)}</div>
-            ${isIncome ? '' : `<button class="btn-small mark-paid" data-id="${b.id}" data-date="${toISODate(d)}">Paid</button>`}
-          </div>
-        </div>
-      `;
-    }).join('');
-    html += '</div>';
-
-    // Income sources
-    html += `<h3 class="section-title">Income</h3>`;
-    if (income.length) {
-      html += '<div class="statement">' + income.map(b => {
+    // ---------- Income sources ----------
+    html += `<h3 class="section-title">Income sources</h3>`;
+    if (incomeList.length) {
+      html += '<div class="statement">' + incomeList.map(b => {
         const next = nextDue(b);
         const status = next ? `next ${shortDate(next)}` : 'ended';
         return `
@@ -1489,13 +1588,68 @@
         `;
       }).join('') + '</div>';
     }
-    html += '<button class="add-goal-btn" id="openAddIncome" style="margin-top: 0;">+ Add income</button>';
+    html += '<button class="add-goal-btn" id="openAddIncome" style="margin-top: 0;">+ Add income source</button>';
 
     el.innerHTML = html;
     el.querySelectorAll('.mark-paid').forEach(btn => btn.addEventListener('click', () => markPaid(btn)));
     el.querySelectorAll('.edit-bill').forEach(btn => btn.addEventListener('click', () => openBillSheet(btn.dataset.id)));
+    el.querySelectorAll('.mark-income-received').forEach(btn => btn.addEventListener('click', () =>
+      openIncomeReceiptSheet(btn.dataset.incomeId, btn.dataset.date, parseFloat(btn.dataset.amount))));
+    el.querySelectorAll('.undo-income-receipt').forEach(btn => btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await deletePaymentRemote(btn.dataset.id);
+        payments = payments.filter(p => p.id !== btn.dataset.id);
+        indexPayments();
+        renderOverview();
+        showToast('Income receipt removed');
+      } catch (e) {
+        btn.disabled = false;
+        showToast("Couldn't remove — check your connection");
+      }
+    }));
     document.getElementById('openAddIncome').addEventListener('click', () => openBillSheet(null, 'income'));
   }
+
+    // ---------- Income receipt sheet ----------
+  const incomeReceiptOverlay = document.getElementById('incomeReceiptOverlay');
+  const incomeReceiptAmount = document.getElementById('incomeReceiptAmount');
+  let incomeReceiptBillId = null;
+  let incomeReceiptDate = null;
+
+  function openIncomeReceiptSheet(billId, date, estimatedAmount) {
+    incomeReceiptBillId = billId;
+    incomeReceiptDate = date;
+    incomeReceiptAmount.value = estimatedAmount;
+    incomeReceiptOverlay.classList.add('open');
+    setTimeout(() => incomeReceiptAmount.focus(), 100);
+  }
+
+  document.getElementById('cancelIncomeReceipt').addEventListener('click', () => {
+    incomeReceiptOverlay.classList.remove('open');
+  });
+  incomeReceiptOverlay.addEventListener('click', (e) => {
+    if (e.target === incomeReceiptOverlay) incomeReceiptOverlay.classList.remove('open');
+  });
+
+  document.getElementById('saveIncomeReceipt').addEventListener('click', async () => {
+    const amount = parseFloat(incomeReceiptAmount.value);
+    if (!(amount > 0)) { showToast('Enter an amount'); return; }
+    const saveBtn = document.getElementById('saveIncomeReceipt');
+    saveBtn.disabled = true;
+    try {
+      const payment = await createPaymentRemote(incomeReceiptBillId, incomeReceiptDate, amount);
+      payments.push(payment);
+      indexPayments();
+      incomeReceiptOverlay.classList.remove('open');
+      renderOverview();
+      showToast(`Income logged — ${formatMoney(amount)}`);
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
 
   // ---------- Bill payments sheet ----------
   const billHistoryOverlay = document.getElementById('billHistoryOverlay');
