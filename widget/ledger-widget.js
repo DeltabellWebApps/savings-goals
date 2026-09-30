@@ -74,8 +74,11 @@ async function fetchAll(token, mode) {
   const out = {};
   const jobs = [];
   if (mode !== 'bills') {
-    jobs.push(rest(token, 'goals?select=name,target,saved,target_date,sort_order&order=sort_order.asc')
-      .then(rows => { out.goals = rows.map(r => ({ name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null })); }));
+    jobs.push(rest(token, 'goals?select=id,name,target,saved,target_date,sort_order&order=sort_order.asc')
+      .then(rows => { out.goals = rows.map(r => ({ id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null })); }));
+    // £0 deposits mark a goal as skipped for the pay period they were made in.
+    jobs.push(rest(token, 'deposits?select=goal_id,created_at&amount=eq.0')
+      .then(rows => { out.skips = rows.map(r => ({ goalId: r.goal_id, createdAt: r.created_at })); }));
   }
   if (mode !== 'goals') {
     jobs.push(rest(token, 'bills?select=id,name,amount,frequency,start_date,end_date,created_at&kind=eq.bill')
@@ -140,7 +143,25 @@ function monthlyNeeded(g) {
   const diffMs = due - new Date();
   if (diffMs <= 0) return { overdue: true, remaining };
   const monthsLeft = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
-  return { monthly: remaining / monthsLeft, dueLabel: due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) };
+  return { monthly: remaining / monthsLeft, remaining, monthsLeft, dueLabel: due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) };
+}
+
+// Pay lands on the last day of each month; a period runs from one payday to the day before the next.
+function currentPayPeriod() {
+  const today = startOfToday();
+  let start = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  if (start > today) start = new Date(today.getFullYear(), today.getMonth(), 0);
+  return { start, end: addDays(new Date(start.getFullYear(), start.getMonth() + 2, 0), -1) };
+}
+
+function isSkipped(g, skips) {
+  const period = currentPayPeriod();
+  return (skips || []).some(s => {
+    if (s.goalId !== g.id) return false;
+    const c = new Date(s.createdAt);
+    const day = new Date(c.getFullYear(), c.getMonth(), c.getDate());
+    return day >= period.start && day <= period.end;
+  });
 }
 
 function timeLabel(ms) {
@@ -267,7 +288,10 @@ function addGoalRow(parent, g, width, opts = {}) {
     const s = monthlyNeeded(g);
     if (s) {
       row.addSpacer(3);
-      const msg = s.overdue ? `Target date passed · ${formatMoney(s.remaining)} to go` : `Save ${formatMoney(s.monthly)}/mo to hit this by ${s.dueLabel}`;
+      let msg;
+      if (s.overdue) msg = `Target date passed · ${formatMoney(s.remaining)} to go`;
+      else if (isSkipped(g, opts.skips)) msg = `Skipped this month · then ${formatMoney(s.remaining / Math.max(1, s.monthsLeft - 1))}/mo`;
+      else msg = `Save ${formatMoney(s.monthly)}/mo to hit this by ${s.dueLabel}`;
       addText(row, msg, Font.regularSystemFont(10), C.soft);
     }
   }
@@ -355,7 +379,7 @@ function goalsLayout(w, family, data, goals) {
     w.addSpacer(large ? 12 : 10);
     goals.slice(0, large ? 6 : 3).forEach((g, i) => {
       if (i > 0) w.addSpacer(large ? 12 : 8);
-      addGoalRow(w, g, 285, { withSuggestion: large });
+      addGoalRow(w, g, 285, { withSuggestion: large, skips: data.skips });
     });
     w.addSpacer();
     addFooter(w, data, large);
