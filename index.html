@@ -184,20 +184,14 @@
     margin-bottom: 10px;
   }
   .suggestion-line.overdue { color: var(--danger); }
-  .suggestion-line.with-action {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-  .suggestion-line .btn-icon { font-size: 11px; padding: 3px 6px; flex-shrink: 0; }
   .goal-foot {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: 10px;
   }
-  .pct { font-size: 11.5px; color: var(--ink-soft); }
-  .goal-actions { display: flex; gap: 8px; align-items: center; }
+  .goal-actions { display: flex; gap: 8px; align-items: center; margin-left: auto; }
   button {
     font-family: 'IBM Plex Mono', monospace;
     cursor: pointer;
@@ -314,7 +308,20 @@
     color: var(--ink-soft);
     font-size: 14px;
   }
-  .btn-danger-text { color: var(--danger); }
+  .btn-primary.btn-danger { background: var(--danger); }
+  .btn-delete {
+    flex: 1;
+    padding: 13px;
+    border-radius: 8px;
+    border: 1px solid var(--danger);
+    background: transparent;
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-delete:active { opacity: 0.7; }
+  .confirm-message { font-size: 13px; line-height: 1.55; color: var(--ink-soft); margin: -6px 0 0; }
+  #confirmOverlay { z-index: 55; }
   .toast {
     position: fixed;
     bottom: calc(72px + env(safe-area-inset-bottom, 0px));
@@ -547,8 +554,8 @@
       <button class="btn-cancel" id="cancelBill">Cancel</button>
       <button class="btn-primary" id="saveBill">Save bill</button>
     </div>
-    <div class="sheet-actions" id="deleteBillRow" style="display:none; margin-top: 4px;">
-      <button class="btn-cancel btn-danger-text" id="deleteBill" style="flex:1; text-align:left;">Delete this bill</button>
+    <div class="sheet-actions" id="deleteBillRow" style="display:none; margin-top: 10px;">
+      <button class="btn-delete" id="deleteBill">Delete this bill</button>
     </div>
   </div>
 </div>
@@ -590,8 +597,8 @@
       <button class="btn-cancel" id="cancelGoal">Cancel</button>
       <button class="btn-primary" id="saveGoal">Save goal</button>
     </div>
-    <div class="sheet-actions" id="deleteGoalRow" style="display:none; margin-top: 4px;">
-      <button class="btn-cancel btn-danger-text" id="deleteGoal" style="flex:1; text-align:left;">Delete this goal</button>
+    <div class="sheet-actions" id="deleteGoalRow" style="display:none; margin-top: 10px;">
+      <button class="btn-delete" id="deleteGoal">Delete this goal</button>
     </div>
   </div>
 </div>
@@ -613,8 +620,8 @@
       <button class="btn-cancel" id="cancelDeposit">Cancel</button>
       <button class="btn-primary" id="saveDeposit">Add</button>
     </div>
-    <div class="sheet-actions" id="deleteDepositRow" style="display:none; margin-top: 4px;">
-      <button class="btn-cancel btn-danger-text" id="deleteDeposit" style="flex:1; text-align:left;">Delete this entry</button>
+    <div class="sheet-actions" id="deleteDepositRow" style="display:none; margin-top: 10px;">
+      <button class="btn-delete" id="deleteDeposit">Delete this entry</button>
     </div>
   </div>
 </div>
@@ -632,8 +639,8 @@
       <button class="btn-cancel" id="cancelPay">Cancel</button>
       <button class="btn-primary" id="savePay">Save</button>
     </div>
-    <div class="sheet-actions" id="deletePayRow" style="display:none; margin-top: 4px;">
-      <button class="btn-cancel btn-danger-text" id="deletePay" style="flex:1; text-align:left;">Delete this pay</button>
+    <div class="sheet-actions" id="deletePayRow" style="display:none; margin-top: 10px;">
+      <button class="btn-delete" id="deletePay">Delete this pay</button>
     </div>
   </div>
 </div>
@@ -645,6 +652,18 @@
     <div id="historyList"></div>
     <div class="sheet-actions">
       <button class="btn-cancel" id="closeHistory" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation Sheet -->
+<div class="overlay" id="confirmOverlay">
+  <div class="sheet">
+    <h2 id="confirmTitle"></h2>
+    <p class="confirm-message" id="confirmMessage"></p>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="confirmCancel">Cancel</button>
+      <button class="btn-primary" id="confirmOk">OK</button>
     </div>
   </div>
 </div>
@@ -998,6 +1017,31 @@
     showToast._timer = setTimeout(() => t.classList.remove('show'), 1800);
   }
 
+  // ---------- Confirmation sheet ----------
+  // Resolves true when the user confirms, false when they cancel.
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  const confirmOk = document.getElementById('confirmOk');
+  let confirmResolve = null;
+
+  function askConfirm(title, message, okLabel, danger) {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    confirmOk.textContent = okLabel;
+    confirmOk.classList.toggle('btn-danger', !!danger);
+    confirmOverlay.classList.add('open');
+    return new Promise(resolve => { confirmResolve = resolve; });
+  }
+
+  function closeConfirm(result) {
+    confirmOverlay.classList.remove('open');
+    if (confirmResolve) confirmResolve(result);
+    confirmResolve = null;
+  }
+
+  confirmOk.addEventListener('click', () => closeConfirm(true));
+  document.getElementById('confirmCancel').addEventListener('click', () => closeConfirm(false));
+  confirmOverlay.addEventListener('click', (e) => { if (e.target === confirmOverlay) closeConfirm(false); });
+
   function monthlyNeeded(goal) {
     if (!goal.targetDate) return null;
     const remaining = goal.target - goal.saved;
@@ -1097,15 +1141,17 @@
       const done = g.saved >= g.target && g.target > 0;
       const suggestion = monthlyNeeded(g);
       let suggestionHtml = '';
+      let skipBtnHtml = '';
       if (suggestion && suggestion.overdue) {
         suggestionHtml = `<div class="suggestion-line overdue">Target date passed — ${formatMoney(suggestion.remaining)} still needed</div>`;
       } else if (suggestion) {
         const skip = skipFor(g.id, period);
-        // Skipping this month spreads what's left over the months after it.
-        const afterSkip = suggestion.remaining / Math.max(1, suggestion.monthsLeft - 1);
         suggestionHtml = skip
-          ? `<div class="suggestion-line with-action"><span>Skipped this month · then ${formatMoney(afterSkip)}/mo to hit this by ${suggestion.dueLabel}</span><button class="btn-icon unskip-goal" data-id="${skip.id}">undo</button></div>`
-          : `<div class="suggestion-line with-action"><span>Save ${formatMoney(suggestion.monthly)}/mo to hit this by ${suggestion.dueLabel}</span><button class="btn-icon skip-goal" data-id="${g.id}">skip month</button></div>`;
+          ? `<div class="suggestion-line">Skipped this month · then ${formatMoney(afterSkipMonthly(suggestion))}/mo to hit this by ${suggestion.dueLabel}</div>`
+          : `<div class="suggestion-line">Save ${formatMoney(suggestion.monthly)}/mo to hit this by ${suggestion.dueLabel}</div>`;
+        skipBtnHtml = skip
+          ? `<button class="btn-small unskip-goal" data-id="${skip.id}">Unskip</button>`
+          : `<button class="btn-small skip-goal" data-id="${g.id}">Skip month</button>`;
       }
       const reorderHtml = showReorder ? `
         <button class="btn-icon reorder-up" data-id="${g.id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
@@ -1124,10 +1170,10 @@
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
           ${suggestionHtml}
           <div class="goal-foot">
-            <div class="goal-amounts"><span class="saved">${formatMoney(g.saved)}</span> of ${formatMoney(g.target)}</div>
+            <div class="goal-amounts"><span class="saved">${formatMoney(g.saved)}</span> of ${formatMoney(g.target)} · ${pct.toFixed(0)}%</div>
             <div class="goal-actions">
-              <span class="pct">${pct.toFixed(0)}%</span>
               <button class="btn-small history-btn" data-id="${g.id}">History</button>
+              ${skipBtnHtml}
               ${!done ? `<button class="btn-small add-deposit" data-id="${g.id}">+ Add</button>` : ''}
             </div>
           </div>
@@ -1145,8 +1191,20 @@
   }
 
   // ---------- Skipping a month ----------
+  // Skipping this month spreads what's left over the months after it.
+  function afterSkipMonthly(suggestion) {
+    return suggestion.remaining / Math.max(1, suggestion.monthsLeft - 1);
+  }
+
   async function skipGoal(btn) {
     const g = goals.find(x => x.id === btn.dataset.id);
+    const s = monthlyNeeded(g);
+    const ok = await askConfirm(
+      `Skip ${g.name} this month?`,
+      `${formatMoney(s.monthly)} won't be set aside this pay period. To still hit ${s.dueLabel}, you'll need ${formatMoney(afterSkipMonthly(s))}/mo after that.`,
+      'Skip month'
+    );
+    if (!ok) return;
     btn.disabled = true;
     try {
       skips.push(await createDepositRemote(g.id, 0, 'Skipped this month'));
@@ -1176,18 +1234,17 @@
     const idx = goals.findIndex(g => g.id === id);
     const otherIdx = idx + dir;
     if (idx === -1 || otherIdx < 0 || otherIdx >= goals.length) return;
-    const a = goals[idx], b = goals[otherIdx];
-    const aOrder = a.sortOrder, bOrder = b.sortOrder;
+    const before = goals.map(g => ({ g, sortOrder: g.sortOrder }));
+    [goals[idx], goals[otherIdx]] = [goals[otherIdx], goals[idx]];
+    // Renumber 1..n so goals that shared a sort_order still end up in a definite order.
+    const changed = goals.filter((g, i) => g.sortOrder !== i + 1);
+    goals.forEach((g, i) => { g.sortOrder = i + 1; });
+    render();
     try {
-      await Promise.all([
-        updateGoalRemote(a.id, { sort_order: bOrder }),
-        updateGoalRemote(b.id, { sort_order: aOrder })
-      ]);
-      a.sortOrder = bOrder;
-      b.sortOrder = aOrder;
-      goals.sort((x, y) => x.sortOrder - y.sortOrder);
-      render();
+      await Promise.all(changed.map(g => updateGoalRemote(g.id, { sort_order: g.sortOrder })));
     } catch (e) {
+      goals = before.map(({ g, sortOrder }) => Object.assign(g, { sortOrder }));
+      render();
       showToast("Couldn't reorder — check your connection");
     }
   }
@@ -1271,6 +1328,8 @@
   document.getElementById('deleteGoal').addEventListener('click', async () => {
     if (!editingGoalId) return;
     const idToDelete = editingGoalId;
+    const g = goals.find(x => x.id === idToDelete);
+    if (!(await askConfirm(`Delete ${g.name}?`, "This removes the goal and all of its history. It can't be undone.", 'Delete', true))) return;
     try {
       await deleteGoalRemote(idToDelete);
       goals = goals.filter(g => g.id !== idToDelete);
@@ -1359,6 +1418,7 @@
   document.getElementById('deleteDeposit').addEventListener('click', async () => {
     if (!editingDepositId) return;
     const g = goals.find(x => x.id === depositGoalId);
+    if (!(await askConfirm('Delete this entry?', `It will be taken off ${g.name}'s saved total.`, 'Delete', true))) return;
     try {
       await deleteDepositRemote(editingDepositId);
       await updateGoalRemote(g.id, { saved: g.saved - editingDepositOriginalAmount });
@@ -1723,6 +1783,7 @@
   document.getElementById('deletePay').addEventListener('click', async () => {
     if (!editingPayId) return;
     const idToDelete = editingPayId;
+    if (!(await askConfirm('Delete this pay?', `${monthLabel(parseLocalDate(payDateISO))}'s pay will be removed from your totals.`, 'Delete', true))) return;
     try {
       await deleteBillRemote(idToDelete);
       bills = bills.filter(b => b.id !== idToDelete);
@@ -1873,6 +1934,9 @@
   document.getElementById('deleteBill').addEventListener('click', async () => {
     if (!editingBillId) return;
     const idToDelete = editingBillId;
+    const b = bills.find(x => x.id === idToDelete);
+    const noun = b.kind === 'income' ? 'income' : 'bill';
+    if (!(await askConfirm(`Delete ${b.name}?`, `This removes the ${noun} and its payment history. It can't be undone.`, 'Delete', true))) return;
     try {
       await deleteBillRemote(idToDelete);
       bills = bills.filter(b => b.id !== idToDelete);
