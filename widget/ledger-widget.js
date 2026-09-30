@@ -74,11 +74,12 @@ async function fetchAll(token, mode) {
   const out = {};
   const jobs = [];
   if (mode !== 'bills') {
-    jobs.push(rest(token, 'goals?select=id,name,target,saved,target_date,sort_order&order=sort_order.asc')
-      .then(rows => { out.goals = rows.map(r => ({ id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null })); }));
-    // £0 deposits mark a goal as skipped for the pay period they were made in.
-    jobs.push(rest(token, 'deposits?select=goal_id,created_at&amount=eq.0')
-      .then(rows => { out.skips = rows.map(r => ({ goalId: r.goal_id, createdAt: r.created_at })); }));
+    jobs.push(rest(token, 'goals?select=id,name,target,saved,target_date,monthly_amount,sort_order&order=sort_order.asc')
+      .then(rows => { out.goals = rows.map(r => ({ id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null, monthlyAmount: r.monthly_amount == null ? null : Number(r.monthly_amount) })); }));
+    // This pay period's deposits; £0 ones mark a goal as skipped.
+    const since = encodeURIComponent(currentPayPeriod().start.toISOString());
+    jobs.push(rest(token, `deposits?select=goal_id,amount,created_at&created_at=gte.${since}`)
+      .then(rows => { out.periodDeposits = rows.map(r => ({ goalId: r.goal_id, amount: Number(r.amount), createdAt: r.created_at })); }));
   }
   if (mode !== 'goals') {
     jobs.push(rest(token, 'bills?select=id,name,amount,frequency,start_date,end_date,created_at&kind=eq.bill')
@@ -135,17 +136,6 @@ function isDone(g) {
   return g.target > 0 && g.saved >= g.target;
 }
 
-function monthlyNeeded(g) {
-  if (!g.targetDate) return null;
-  const remaining = g.target - g.saved;
-  if (remaining <= 0) return null;
-  const due = new Date(g.targetDate + 'T00:00:00');
-  const diffMs = due - new Date();
-  if (diffMs <= 0) return { overdue: true, remaining };
-  const monthsLeft = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24 * 30.44)));
-  return { monthly: remaining / monthsLeft, remaining, monthsLeft, dueLabel: due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) };
-}
-
 // Pay lands on the last day of each month; a period runs from one payday to the day before the next.
 function currentPayPeriod() {
   const today = startOfToday();
@@ -154,14 +144,41 @@ function currentPayPeriod() {
   return { start, end: addDays(new Date(start.getFullYear(), start.getMonth() + 2, 0), -1) };
 }
 
-function isSkipped(g, skips) {
+// Same as the web app's goalPlan: this period's amount is worked out from where the goal stood when the
+// period began, so saving during the period counts towards it. The cache may hold an older period's
+// deposits, hence the date check.
+function goalPlan(g, deposits) {
   const period = currentPayPeriod();
-  return (skips || []).some(s => {
-    if (s.goalId !== g.id) return false;
-    const c = new Date(s.createdAt);
-    const day = new Date(c.getFullYear(), c.getMonth(), c.getDate());
-    return day >= period.start && day <= period.end;
-  });
+  const mine = (deposits || []).filter(d => d.goalId === g.id && new Date(d.createdAt) >= period.start);
+  const skipped = mine.some(d => d.amount === 0);
+  const savedThisPeriod = mine.reduce((s, d) => s + d.amount, 0);
+  const remaining = g.target - g.saved;
+  const remainingAtStart = remaining + savedThisPeriod;
+  const plan = { planned: 0, savedThisPeriod, skipped, remaining, overdue: false, dueLabel: null, afterSkip: 0 };
+  if (g.targetDate) {
+    const due = parseLocalDate(g.targetDate);
+    plan.dueLabel = due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    if (due <= startOfToday()) {
+      plan.overdue = remaining > 0;
+    } else if (remainingAtStart > 0) {
+      const monthsLeft = Math.max(1, Math.ceil((due - period.start) / (1000 * 60 * 60 * 24 * 30.44)));
+      plan.planned = remainingAtStart / monthsLeft;
+      plan.afterSkip = Math.max(0, remaining) / Math.max(1, monthsLeft - 1);
+    }
+  } else if (g.monthlyAmount) {
+    plan.planned = Math.min(g.monthlyAmount, Math.max(0, remainingAtStart));
+    plan.afterSkip = g.monthlyAmount;
+  }
+  return plan;
+}
+
+function planLine(p) {
+  if (p.overdue) return `Target date passed · ${formatMoney(p.remaining)} to go`;
+  if (p.skipped) return `Skipped this month · then ${formatMoney(p.afterSkip)}/mo`;
+  if (p.planned > 0 && p.savedThisPeriod >= p.planned) return `✓ ${formatMoney(p.savedThisPeriod)} saved this month`;
+  if (p.planned > 0 && p.savedThisPeriod > 0) return `${formatMoney(p.savedThisPeriod)} of ${formatMoney(p.planned)} saved this month`;
+  if (p.planned > 0) return `Save ${formatMoney(p.planned)}/mo${p.dueLabel ? ` to hit this by ${p.dueLabel}` : ''}`;
+  return null;
 }
 
 function timeLabel(ms) {
@@ -285,13 +302,9 @@ function addGoalRow(parent, g, width, opts = {}) {
   row.addSpacer(4);
   addBar(row, width, pctOf(g), isDone(g));
   if (opts.withSuggestion) {
-    const s = monthlyNeeded(g);
-    if (s) {
+    const msg = planLine(goalPlan(g, opts.periodDeposits));
+    if (msg) {
       row.addSpacer(3);
-      let msg;
-      if (s.overdue) msg = `Target date passed · ${formatMoney(s.remaining)} to go`;
-      else if (isSkipped(g, opts.skips)) msg = `Skipped this month · then ${formatMoney(s.remaining / Math.max(1, s.monthsLeft - 1))}/mo`;
-      else msg = `Save ${formatMoney(s.monthly)}/mo to hit this by ${s.dueLabel}`;
       addText(row, msg, Font.regularSystemFont(10), C.soft);
     }
   }
@@ -379,7 +392,7 @@ function goalsLayout(w, family, data, goals) {
     w.addSpacer(large ? 12 : 10);
     goals.slice(0, large ? 6 : 3).forEach((g, i) => {
       if (i > 0) w.addSpacer(large ? 12 : 8);
-      addGoalRow(w, g, 285, { withSuggestion: large, skips: data.skips });
+      addGoalRow(w, g, 285, { withSuggestion: large, periodDeposits: data.periodDeposits });
     });
     w.addSpacer();
     addFooter(w, data, large);
