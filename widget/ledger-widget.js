@@ -2,6 +2,12 @@
 // Run it once in the Scriptable app to sign in, then add a Scriptable widget and pick this script.
 // Set the widget's Parameter to choose what it shows:  goals (default)  ·  bills  ·  both
 // Supports small, medium and large Home Screen widgets, plus the three Lock Screen sizes.
+// Needs ledger-core.js (from the root of the repo) saved next to this script in Scriptable's folder.
+
+const {
+  toISODate, startOfToday, addDays, occurrencesFrom, trackFrom,
+  currentPayPeriod, formatMoney, pctOf, isDone, goalPlan
+} = importModule('ledger-core');
 
 const SUPABASE_URL = 'https://vpbrurxowgneplxpwkkv.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwYnJ1cnhvd2duZXBseHB3a2t2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MzAwNzcsImV4cCI6MjEwNjEwNjA3N30.3yq74-z1tkQDNA8BB6JFG3_yFwLN-yjHz_7WJyrAqDs';
@@ -74,15 +80,15 @@ async function fetchAll(token, mode) {
   const out = {};
   const jobs = [];
   if (mode !== 'bills') {
-    jobs.push(rest(token, 'goals?select=id,name,target,saved,target_date,monthly_amount,sort_order&order=sort_order.asc')
-      .then(rows => { out.goals = rows.map(r => ({ id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null, monthlyAmount: r.monthly_amount == null ? null : Number(r.monthly_amount) })); }));
+    jobs.push(rest(token, 'goals?select=id,name,target,saved,target_date,monthly_amount,sort_order,created_at&archived=is.false&order=sort_order.asc')
+      .then(rows => { out.goals = rows.map(r => ({ id: r.id, name: r.name, target: Number(r.target), saved: Number(r.saved), targetDate: r.target_date || null, monthlyAmount: r.monthly_amount == null ? null : Number(r.monthly_amount), createdAt: r.created_at })); }));
     // This pay period's deposits; £0 ones mark a goal as skipped.
     const since = encodeURIComponent(currentPayPeriod().start.toISOString());
-    jobs.push(rest(token, `deposits?select=goal_id,amount,created_at&created_at=gte.${since}`)
-      .then(rows => { out.periodDeposits = rows.map(r => ({ goalId: r.goal_id, amount: Number(r.amount), createdAt: r.created_at })); }));
+    jobs.push(rest(token, `deposits?select=id,goal_id,amount,created_at&created_at=gte.${since}`)
+      .then(rows => { out.periodDeposits = rows.map(r => ({ id: r.id, goalId: r.goal_id, amount: Number(r.amount), createdAt: r.created_at })); }));
   }
   if (mode !== 'goals') {
-    jobs.push(rest(token, 'bills?select=id,name,amount,frequency,start_date,end_date,created_at&kind=eq.bill')
+    jobs.push(rest(token, 'bills?select=id,name,amount,frequency,start_date,end_date,created_at&kind=eq.bill&archived=is.false')
       .then(rows => { out.bills = rows.map(r => ({ id: r.id, name: r.name, amount: Number(r.amount), frequency: r.frequency, startDate: r.start_date, endDate: r.end_date || null, createdAt: r.created_at })); }));
     jobs.push(rest(token, 'bill_payments?select=bill_id,due_date')
       .then(rows => { out.paid = rows.map(r => r.bill_id + '|' + r.due_date); }));
@@ -120,61 +126,11 @@ async function loadData(mode) {
   }
 }
 
-// ---------- Helpers (mirroring the web app) ----------
-function formatMoney(n) {
-  const sign = n < 0 ? '-' : '';
-  const abs = Math.round(Math.abs(Number(n)) * 100) / 100;
-  const pence = Number.isInteger(abs) ? 0 : 2;
-  return sign + '£' + abs.toLocaleString('en-GB', { minimumFractionDigits: pence, maximumFractionDigits: 2 });
-}
-
-function pctOf(g) {
-  return g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
-}
-
-function isDone(g) {
-  return g.target > 0 && g.saved >= g.target;
-}
-
-// Pay lands on the last day of each month; a period runs from one payday to the day before the next.
-function currentPayPeriod() {
-  const today = startOfToday();
-  let start = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-  if (start > today) start = new Date(today.getFullYear(), today.getMonth(), 0);
-  return { start, end: addDays(new Date(start.getFullYear(), start.getMonth() + 2, 0), -1) };
-}
-
-// Same as the web app's goalPlan: this period's amount is worked out from where the goal stood when the
-// period began, so saving during the period counts towards it. The cache may hold an older period's
-// deposits, hence the date check.
-function goalPlan(g, deposits) {
-  const period = currentPayPeriod();
-  const mine = (deposits || []).filter(d => d.goalId === g.id && new Date(d.createdAt) >= period.start);
-  const skipped = mine.some(d => d.amount === 0);
-  const savedThisPeriod = mine.reduce((s, d) => s + d.amount, 0);
-  const remaining = g.target - g.saved;
-  const remainingAtStart = remaining + savedThisPeriod;
-  const plan = { planned: 0, savedThisPeriod, skipped, remaining, overdue: false, dueLabel: null, afterSkip: 0 };
-  if (g.targetDate) {
-    const due = parseLocalDate(g.targetDate);
-    plan.dueLabel = due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-    if (due <= startOfToday()) {
-      plan.overdue = remaining > 0;
-    } else if (remainingAtStart > 0) {
-      const monthsLeft = Math.max(1, Math.ceil((due - period.start) / (1000 * 60 * 60 * 24 * 30.44)));
-      plan.planned = remainingAtStart / monthsLeft;
-      plan.afterSkip = Math.max(0, remaining) / Math.max(1, monthsLeft - 1);
-    }
-  } else if (g.monthlyAmount) {
-    plan.planned = Math.min(g.monthlyAmount, Math.max(0, remainingAtStart));
-    plan.afterSkip = g.monthlyAmount;
-  }
-  return plan;
-}
-
+// ---------- Helpers ----------
+// goalPlan (from ledger-core) ignores deposits from earlier periods, which the cache may still hold.
 function planLine(p) {
   if (p.overdue) return `Target date passed · ${formatMoney(p.remaining)} to go`;
-  if (p.skipped) return `Skipped this month · then ${formatMoney(p.afterSkip)}/mo`;
+  if (p.skip) return `Skipped this month · then ${formatMoney(p.afterSkip)}/mo`;
   if (p.planned > 0 && p.savedThisPeriod >= p.planned) return `✓ ${formatMoney(p.savedThisPeriod)} saved this month`;
   if (p.planned > 0 && p.savedThisPeriod > 0) return `${formatMoney(p.savedThisPeriod)} of ${formatMoney(p.planned)} saved this month`;
   if (p.planned > 0) return `Save ${formatMoney(p.planned)}/mo${p.dueLabel ? ` to hit this by ${p.dueLabel}` : ''}`;
@@ -186,53 +142,7 @@ function timeLabel(ms) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-// ---------- Bill schedule (same rules as the web app) ----------
-function parseLocalDate(s) {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
-
-function toISODate(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function startOfToday() {
-  const t = new Date();
-  return new Date(t.getFullYear(), t.getMonth(), t.getDate());
-}
-
-function addDays(d, n) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-}
-
-function occurrence(start, freq, n) {
-  if (freq === 'weekly') return addDays(start, 7 * n);
-  if (freq === 'fortnightly') return addDays(start, 14 * n);
-  const step = { monthly: 1, quarterly: 3, yearly: 12 }[freq];
-  const y = start.getFullYear(), m = start.getMonth() + step * n;
-  const lastDay = new Date(y, m + 1, 0).getDate();
-  return new Date(y, m, Math.min(start.getDate(), lastDay));
-}
-
-function* occurrencesFrom(bill, from) {
-  const start = parseLocalDate(bill.startDate);
-  if (bill.frequency === 'once') {
-    if (start >= from) yield start;
-    return;
-  }
-  const end = bill.endDate ? parseLocalDate(bill.endDate) : null;
-  for (let n = 0, d = start; !end || d <= end; d = occurrence(start, bill.frequency, ++n)) {
-    if (d >= from) yield d;
-  }
-}
-
-// Recurring bills are tracked from the day they were added; occurrences before that count as settled.
-function trackFrom(bill) {
-  if (bill.frequency === 'once') return parseLocalDate(bill.startDate);
-  const c = new Date(bill.createdAt);
-  return new Date(c.getFullYear(), c.getMonth(), c.getDate());
-}
-
+// ---------- Bills ----------
 // Every unpaid occurrence (overdue ones included) up to two months ahead, soonest first.
 function upcomingBills(data) {
   const paid = new Set(data.paid || []);

@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="ledger-core.js"></script>
 <style>
   :root {
     --paper: #F3F0E8;
@@ -19,6 +20,7 @@
     --gold-soft: #E7D5AE;
     --green-deep: #22392F;
     --danger: #A24A3B;
+    --chart: #B8863B;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -34,6 +36,7 @@
       --gold-soft: #4A3D25;
       --green-deep: #DDE7DE;
       --danger: #D98C79;
+      --chart: #B88A44;
     }
   }
   :root[data-theme="dark"] {
@@ -46,6 +49,7 @@
     --gold-soft: #4A3D25;
     --green-deep: #DDE7DE;
     --danger: #D98C79;
+    --chart: #B88A44;
   }
   html { scroll-padding-top: env(safe-area-inset-top, 0px); height: 100%; }
   * { box-sizing: border-box; }
@@ -453,6 +457,118 @@
     padding: 14px 0 10px;
   }
   .month-head .amt { color: var(--ink-soft); font-size: 12px; }
+
+  /* Goal projections */
+  .projection-line { font-size: 11px; color: var(--ink-soft); margin: -6px 0 10px; }
+  .projection-line.behind { color: var(--danger); }
+
+  /* Drag to reorder */
+  .drag-handle {
+    font-size: 15px;
+    line-height: 1;
+    padding: 6px 8px;
+    color: var(--ink-soft);
+    border-radius: 6px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .drag-handle:focus-visible { outline: 2px solid var(--gold); }
+  .goal.dragging {
+    z-index: 5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    cursor: grabbing;
+  }
+  .goal.shifting { transition: transform .15s ease; }
+
+  /* Archive */
+  .btn-secondary {
+    flex: 1;
+    padding: 13px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .btn-secondary:active { opacity: 0.7; }
+  .archive-toggle {
+    display: block;
+    width: 100%;
+    margin-top: 22px;
+    padding: 8px 0;
+    text-align: left;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .archive-list { margin-top: 4px; }
+
+  /* Budgets */
+  .goal.over { border-color: var(--danger); }
+  .goal.over .bar-fill { background: var(--danger); }
+  .goal.over .suggestion-line { color: var(--danger); }
+
+  /* Bill search */
+  .search-input {
+    width: 100%;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--paper-raised);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+  }
+  .search-input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  /* Charts */
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; overflow: visible; }
+  .chart .grid { stroke: var(--line); stroke-width: 1; }
+  .chart .axis-text { fill: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; font-size: 10px; }
+  .chart .axis-text.current { fill: var(--ink); font-weight: 600; }
+  .chart .col { fill: var(--chart); }
+  .chart .col.faded { fill: var(--chart); fill-opacity: 0.4; }
+  .chart .col.hover { fill-opacity: 1; filter: brightness(1.08); }
+  .chart .line { fill: none; stroke: var(--chart); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .area { fill: var(--chart); fill-opacity: 0.1; stroke: none; }
+  .chart .target-line { stroke: var(--ink-soft); stroke-width: 1; }
+  .chart .dot { fill: var(--chart); stroke: var(--paper-raised); stroke-width: 2; }
+  .chart .crosshair { stroke: var(--ink-soft); stroke-width: 1; }
+  .chart .hit { fill: transparent; cursor: pointer; }
+  .chart-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft); margin: 2px 0 8px; }
+  .chart-legend .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--chart); margin-right: 5px; vertical-align: -1px; }
+  .chart-legend .key.faded { opacity: 0.4; }
+  .chart-box { padding: 14px 18px 12px; }
+  .chart-tip {
+    position: fixed;
+    z-index: 70;
+    pointer-events: none;
+    background: var(--paper-raised);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11.5px;
+    line-height: 1.5;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    max-width: 220px;
+    display: none;
+  }
+  .chart-tip .tip-title { font-weight: 600; }
+  .chart-tip .tip-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-soft); }
+  .chart-tip .tip-row b { color: var(--ink); font-weight: 500; }
+  .cat-row { padding: 9px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .cat-row:last-child { border-bottom: none; }
+  .cat-row .cat-head { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 6px; }
+  .cat-row .cat-head .amt { color: var(--ink-soft); }
+  .cat-row .bar-track { height: 6px; margin-bottom: 0; }
+  .cat-row.active .cat-head { font-weight: 600; }
+
+  /* Sign-in */
+  .auth-divider { text-align: center; font-size: 11px; color: var(--ink-soft); margin: 4px 0 10px; }
+  .auth-notice { font-size: 12.5px; line-height: 1.5; color: var(--ink); background: var(--paper-raised); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; display: none; }
 </style>
 </head>
 <body>
@@ -469,7 +585,10 @@
     <input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••">
   </div>
   <div id="authError" style="color: var(--danger); font-size: 12.5px; margin-bottom: 12px; display:none;"></div>
+  <div class="auth-notice" id="authNotice"></div>
   <button class="btn-primary" id="authSubmit" style="width:100%; margin-bottom: 10px;">Sign in</button>
+  <div class="auth-divider">or</div>
+  <button class="btn-secondary" id="authMagic" style="width:100%; margin-bottom: 10px;">Email me a sign-in link</button>
   <button class="btn-cancel" id="authToggle" style="width:100%;">Need an account? Sign up</button>
 </div>
 
@@ -492,15 +611,30 @@
     <div class="goal-list" id="goalList"></div>
 
     <button class="add-goal-btn" id="openAddGoal">+ New goal</button>
+    <div id="goalArchive"></div>
   </section>
 
   <section class="view" id="billsView">
     <p class="sub">What goes out regularly, and when it's due next.</p>
 
     <div class="totals" id="billTotals"></div>
+    <input class="search-input" id="billSearch" type="search" placeholder="Search bills" autocomplete="off" style="display:none;">
+    <div class="chip-row" id="billChips"></div>
     <div class="goal-list" id="billList"></div>
 
     <button class="add-goal-btn" id="openAddBill">+ New bill</button>
+    <div id="billArchive"></div>
+    <div id="billTrends"></div>
+  </section>
+
+  <section class="view" id="budgetsView">
+    <p class="sub">What you allow yourself each month, and what's gone.</p>
+
+    <div class="totals" id="budgetTotals"></div>
+    <div class="goal-list" id="budgetList"></div>
+
+    <button class="add-goal-btn" id="openAddBudget">+ New budget</button>
+    <div id="budgetArchive"></div>
   </section>
 
   <nav class="tabbar">
@@ -508,6 +642,7 @@
       <a class="tab" href="#overview" data-view="overview">Overview</a>
       <a class="tab" href="#goals" data-view="goals">Goals</a>
       <a class="tab" href="#bills" data-view="bills">Bills</a>
+      <a class="tab" href="#budgets" data-view="budgets">Budgets</a>
     </div>
   </nav>
 </div>
@@ -555,6 +690,7 @@
       <button class="btn-primary" id="saveBill">Save bill</button>
     </div>
     <div class="sheet-actions" id="deleteBillRow" style="display:none; margin-top: 10px;">
+      <button class="btn-secondary" id="archiveBill">Archive</button>
       <button class="btn-delete" id="deleteBill">Delete this bill</button>
     </div>
   </div>
@@ -567,6 +703,84 @@
     <div id="billHistoryList"></div>
     <div class="sheet-actions">
       <button class="btn-cancel" id="closeBillHistory" style="flex:1;">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bill Payment Amount Sheet -->
+<div class="overlay" id="paymentOverlay">
+  <div class="sheet">
+    <h2 id="paymentSheetTitle">Paid</h2>
+    <div class="field">
+      <label for="paymentAmountInput">Amount paid</label>
+      <input id="paymentAmountInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+      <div class="field-hint" id="paymentHint"></div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelPayment">Cancel</button>
+      <button class="btn-primary" id="savePayment">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Budget Sheet -->
+<div class="overlay" id="budgetOverlay">
+  <div class="sheet">
+    <h2 id="budgetSheetTitle">New budget</h2>
+    <div class="field">
+      <label for="budgetNameInput">What's it for?</label>
+      <input id="budgetNameInput" type="text" placeholder="e.g. Groceries" maxlength="40">
+    </div>
+    <div class="field">
+      <label for="budgetAmountInput">Each month</label>
+      <input id="budgetAmountInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
+      <div class="field-hint">Resets every payday. It comes off "Free to spend" on the Overview.</div>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelBudget">Cancel</button>
+      <button class="btn-primary" id="saveBudget">Save budget</button>
+    </div>
+    <div class="sheet-actions" id="deleteBudgetRow" style="display:none; margin-top: 10px;">
+      <button class="btn-secondary" id="archiveBudget">Archive</button>
+      <button class="btn-delete" id="deleteBudget">Delete this budget</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Spend Sheet -->
+<div class="overlay" id="spendOverlay">
+  <div class="sheet">
+    <h2 id="spendSheetTitle">Spent</h2>
+    <div class="field">
+      <label for="spendAmountInput">Amount</label>
+      <input id="spendAmountInput" type="number" inputmode="decimal" placeholder="0" step="0.01">
+      <div class="field-hint">Enter a negative number for a refund.</div>
+    </div>
+    <div class="field">
+      <label for="spendNoteInput">Note (optional)</label>
+      <input id="spendNoteInput" type="text" placeholder="e.g. Big shop" maxlength="60">
+    </div>
+    <div class="field">
+      <label for="spendDateInput">Date</label>
+      <input id="spendDateInput" type="date">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="cancelSpend">Cancel</button>
+      <button class="btn-primary" id="saveSpend">Add</button>
+    </div>
+    <div class="sheet-actions" id="deleteSpendRow" style="display:none; margin-top: 10px;">
+      <button class="btn-delete" id="deleteSpend">Delete this entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Spend History Sheet -->
+<div class="overlay" id="spendHistoryOverlay">
+  <div class="sheet">
+    <h2>Spending — <span id="spendHistoryName"></span></h2>
+    <div id="spendHistoryList"></div>
+    <div class="sheet-actions">
+      <button class="btn-cancel" id="closeSpendHistory" style="flex:1;">Close</button>
     </div>
   </div>
 </div>
@@ -603,6 +817,7 @@
       <button class="btn-primary" id="saveGoal">Save goal</button>
     </div>
     <div class="sheet-actions" id="deleteGoalRow" style="display:none; margin-top: 10px;">
+      <button class="btn-secondary" id="archiveGoal">Archive</button>
       <button class="btn-delete" id="deleteGoal">Delete this goal</button>
     </div>
   </div>
@@ -654,6 +869,7 @@
 <div class="overlay" id="historyOverlay">
   <div class="sheet">
     <h2>History — <span id="historyGoalName"></span></h2>
+    <div class="chart" id="historyChart"></div>
     <div id="historyList"></div>
     <div class="sheet-actions">
       <button class="btn-cancel" id="closeHistory" style="flex:1;">Close</button>
@@ -674,6 +890,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="chart-tip" id="chartTip" role="status"></div>
 
 <script>
 (function() {
@@ -695,6 +912,20 @@
   let editingBillId = null;
   let editingBillKind = 'bill';
   let historyBillId = null;
+  let activeBillCategory = 'All';
+  let billQuery = '';
+  let budgets = [];
+  let periodSpends = [];   // spends dated within this pay period
+  let editingBudgetId = null;
+  let spendBudgetId = null;
+  let editingSpendId = null;
+  let spendHistoryBudgetId = null;
+  const showArchived = { goals: false, bills: false, budgets: false };
+
+  const {
+    FREQUENCY_LABELS, parseLocalDate, toISODate, startOfToday, addDays, lastDayOfMonth,
+    occurrencesFrom, occurrencesBetween, nextDue, trackFrom, monthlyAverage, currentPayPeriod, formatMoney
+  } = LedgerCore;
 
   // ---------- Mapping ----------
   function fromGoalRow(row) {
@@ -707,6 +938,7 @@
       targetDate: row.target_date || null,
       monthlyAmount: row.monthly_amount == null ? null : Number(row.monthly_amount),
       sortOrder: row.sort_order == null ? 0 : Number(row.sort_order),
+      archived: !!row.archived,
       createdAt: row.created_at
     };
   }
@@ -799,6 +1031,7 @@
       endDate: row.end_date || null,
       kind: row.kind || 'bill',
       category: row.category || '',
+      archived: !!row.archived,
       createdAt: row.created_at
     };
   }
@@ -858,80 +1091,85 @@
     return fromPaymentRow(data[0]);
   }
 
+  async function updatePaymentRemote(id, fields) {
+    const { error } = await sb.from('bill_payments').update(fields).eq('id', id);
+    if (error) throw error;
+  }
+
   async function deletePaymentRemote(id) {
     const { error } = await sb.from('bill_payments').delete().eq('id', id);
     if (error) throw error;
   }
 
-  // ---------- Bill schedule maths ----------
-  const FREQUENCY_LABELS = {
-    weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly',
-    quarterly: 'Quarterly', yearly: 'Yearly', once: 'One-off'
-  };
-  const PER_MONTH = { weekly: 52 / 12, fortnightly: 26 / 12, monthly: 1, quarterly: 1 / 3, yearly: 1 / 12, once: 0 };
-
-  function parseLocalDate(s) {
-    const [y, m, d] = s.split('-').map(Number);
-    return new Date(y, m - 1, d);
+  // ---------- Budgets CRUD ----------
+  function fromBudgetRow(row) {
+    return {
+      id: row.id,
+      name: row.name,
+      amount: Number(row.amount),
+      sortOrder: row.sort_order == null ? 0 : Number(row.sort_order),
+      archived: !!row.archived,
+      createdAt: row.created_at
+    };
   }
 
-  function toISODate(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  function fromSpendRow(row) {
+    return {
+      id: row.id,
+      budgetId: row.budget_id,
+      amount: Number(row.amount),
+      note: row.note || '',
+      spentOn: row.spent_on,
+      createdAt: row.created_at
+    };
   }
 
-  function startOfToday() {
-    const t = new Date();
-    return new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  }
-
-  function addDays(d, n) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
-  }
-
-  // nth occurrence from start. Month-based bills keep the start's day, clamped to the month's end (31st -> 30th/28th).
-  function occurrence(start, freq, n) {
-    if (freq === 'weekly') return addDays(start, 7 * n);
-    if (freq === 'fortnightly') return addDays(start, 14 * n);
-    const step = { monthly: 1, quarterly: 3, yearly: 12 }[freq];
-    const y = start.getFullYear(), m = start.getMonth() + step * n;
-    const lastDay = new Date(y, m + 1, 0).getDate();
-    return new Date(y, m, Math.min(start.getDate(), lastDay));
-  }
-
-  // Occurrences on or after `from`, in order, stopping after the end date (if any).
-  function* occurrencesFrom(bill, from) {
-    const start = parseLocalDate(bill.startDate);
-    if (bill.frequency === 'once') {
-      if (start >= from) yield start;
-      return;
-    }
-    const end = bill.endDate ? parseLocalDate(bill.endDate) : null;
-    for (let n = 0, d = start; !end || d <= end; d = occurrence(start, bill.frequency, ++n)) {
-      if (d >= from) yield d;
+  async function loadBudgets() {
+    try {
+      const { data, error } = await sb.from('budgets').select('*')
+        .order('sort_order', { ascending: true }).order('created_at', { ascending: true });
+      if (error) throw error;
+      budgets = data.map(fromBudgetRow);
+    } catch (e) {
+      showToast("Couldn't load budgets — check your connection");
+      budgets = [];
     }
   }
 
-  // Occurrences within [from, to], in order.
-  function occurrencesBetween(bill, from, to) {
-    const out = [];
-    for (const d of occurrencesFrom(bill, from)) {
-      if (d > to) break;
-      out.push(d);
+  async function loadPeriodSpends() {
+    try {
+      const { data, error } = await sb.from('spends').select('*').gte('spent_on', toISODate(currentPayPeriod().start));
+      if (error) throw error;
+      periodSpends = data.map(fromSpendRow);
+    } catch (e) {
+      periodSpends = [];
     }
-    return out;
   }
 
-  function nextDue(bill) {
-    return occurrencesFrom(bill, startOfToday()).next().value || null;
+  async function loadSpends(budgetId) {
+    const { data, error } = await sb.from('spends').select('*').eq('budget_id', budgetId)
+      .order('spent_on', { ascending: false }).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map(fromSpendRow);
   }
 
-  // Recurring bills are tracked from the day they were added; occurrences before that count as settled.
-  function trackFrom(bill) {
-    if (bill.frequency === 'once') return parseLocalDate(bill.startDate);
-    const c = new Date(bill.createdAt);
-    return new Date(c.getFullYear(), c.getMonth(), c.getDate());
+  async function saveRow(table, id, fields) {
+    if (id) {
+      const { error } = await sb.from(table).update(fields).eq('id', id);
+      if (error) throw error;
+      return null;
+    }
+    const { data, error } = await sb.from(table).insert([fields]).select();
+    if (error) throw error;
+    return data[0];
   }
 
+  async function deleteRow(table, id) {
+    const { error } = await sb.from(table).delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  // ---------- Bill schedule ----------
   function indexPayments() {
     paidIndex = new Map(payments.map(p => [p.billId + '|' + p.dueDate, p]));
   }
@@ -952,27 +1190,7 @@
     return occurrencesBetween(bill, from, to).filter(d => !paymentFor(bill, d));
   }
 
-  // Average per month across entries that haven't ended.
-  function monthlyAverage(list, today) {
-    return list
-      .filter(b => !b.endDate || parseLocalDate(b.endDate) >= today)
-      .reduce((s, b) => s + b.amount * PER_MONTH[b.frequency], 0);
-  }
-
-  // ---------- Pay period ----------
-  // Pay lands on the last day of each month, so a period runs from one payday to the day before the next.
-  function lastDayOfMonth(y, m) {
-    return new Date(y, m + 1, 0);
-  }
-
-  function currentPayPeriod() {
-    const today = startOfToday();
-    let start = lastDayOfMonth(today.getFullYear(), today.getMonth());
-    if (start > today) start = lastDayOfMonth(today.getFullYear(), today.getMonth() - 1);
-    const nextPayday = lastDayOfMonth(start.getFullYear(), start.getMonth() + 1);
-    return { start, end: addDays(nextPayday, -1), nextPayday };
-  }
-
+  // ---------- Pay ----------
   // Each month's pay is a one-off income row dated on payday, marked by this category.
   const PAY_TAG = 'pay';
 
@@ -1002,13 +1220,6 @@
   }
 
   // ---------- Helpers ----------
-  function formatMoney(n) {
-    const sign = n < 0 ? '-' : '';
-    const abs = Math.round(Math.abs(Number(n)) * 100) / 100;
-    const pence = Number.isInteger(abs) ? 0 : 2; // £950, but £174.50 rather than £174.5
-    return sign + '£' + abs.toLocaleString('en-GB', { minimumFractionDigits: pence, maximumFractionDigits: 2 });
-  }
-
   function formatDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -1053,39 +1264,55 @@
     return input.validity.badInput;
   }
 
-  const AVG_MONTH_MS = 1000 * 60 * 60 * 24 * 30.44;
-
-  // What a goal asks for this pay period. It's worked out from where the goal stood when the period began,
-  // so money added during the period counts towards it rather than shrinking it.
-  //   planned   — this period's amount (from the target date, or the goal's monthly amount)
-  //   committed — what the Overview sets aside: the plan, or more if more was saved; only what was saved if skipped
-  //   afterSkip — the monthly amount needed from next period if this one is skipped
+  // See LedgerCore.goalPlan for what the plan holds.
   function goalPlan(goal) {
-    const period = currentPayPeriod();
-    const mine = periodDeposits.filter(d => d.goalId === goal.id);
-    const skip = mine.find(d => d.amount === 0) || null;
-    const savedThisPeriod = mine.reduce((s, d) => s + d.amount, 0);
-    const remaining = goal.target - goal.saved;
-    const remainingAtStart = remaining + savedThisPeriod;
-    const plan = { planned: 0, savedThisPeriod, skip, remaining, overdue: false, dueLabel: null, afterSkip: 0 };
+    return LedgerCore.goalPlan(goal, periodDeposits);
+  }
 
-    if (goal.targetDate) {
-      const due = parseLocalDate(goal.targetDate);
-      plan.dueLabel = due.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-      if (due <= startOfToday()) {
-        plan.overdue = remaining > 0;
-      } else if (remainingAtStart > 0) {
-        const monthsLeft = Math.max(1, Math.ceil((due - period.start) / AVG_MONTH_MS));
-        plan.planned = remainingAtStart / monthsLeft;
-        plan.afterSkip = Math.max(0, remaining) / Math.max(1, monthsLeft - 1);
-      }
-    } else if (goal.monthlyAmount) {
-      plan.planned = Math.min(goal.monthlyAmount, Math.max(0, remainingAtStart));
-      plan.afterSkip = goal.monthlyAmount;
+  // What a budget has used this pay period. `committed` is what the Overview sets aside: the allowance, or more if overspent.
+  function budgetUse(budget) {
+    const spent = periodSpends.filter(s => s.budgetId === budget.id).reduce((t, s) => t + s.amount, 0);
+    return { spent, left: budget.amount - spent, over: spent > budget.amount, committed: Math.max(budget.amount, spent) };
+  }
+
+  const liveGoals = () => goals.filter(g => !g.archived);
+  const liveBudgets = () => budgets.filter(b => !b.archived);
+
+  // The "Archived (n)" toggle and its rows, shared by goals, bills and budgets.
+  //   rows — [{ id, name, meta, amount }]
+  function renderArchive(containerId, key, rows, noun) {
+    const el = document.getElementById(containerId);
+    if (rows.length === 0) { el.innerHTML = ''; return; }
+    const open = showArchived[key];
+    el.innerHTML = `
+      <button class="archive-toggle" aria-expanded="${open}">${open ? '▾' : '▸'} Archived ${noun} (${rows.length})</button>
+      ${open ? `<div class="statement archive-list">${rows.map(r => `
+        <div class="statement-row">
+          <div>${escapeHtml(r.name)}<span class="meta">${r.meta}</span></div>
+          <div class="row-end">
+            <div class="amt">${r.amount}</div>
+            <button class="btn-small unarchive" data-id="${r.id}">Restore</button>
+          </div>
+        </div>`).join('')}</div>` : ''}
+    `;
+    el.querySelector('.archive-toggle').addEventListener('click', () => { showArchived[key] = !open; render(); });
+    el.querySelectorAll('.unarchive').forEach(btn => btn.addEventListener('click', () => setArchived(key, btn.dataset.id, false)));
+  }
+
+  // Archived items drop out of every list, total and chart, but keep their history.
+  async function setArchived(key, id, archived) {
+    const list = { goals, bills, budgets }[key];
+    const item = list.find(x => x.id === id);
+    try {
+      await saveRow(key, id, { archived });
+      item.archived = archived;
+      render();
+      showToast(`${archived ? 'Archived' : 'Restored'} ${item.name}`);
+      return true;
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+      return false;
     }
-
-    plan.committed = skip ? Math.max(0, savedThisPeriod) : Math.max(plan.planned, savedThisPeriod);
-    return plan;
   }
 
   function escapeHtml(str) {
@@ -1095,23 +1322,18 @@
   }
 
   // ---------- Category chips ----------
-  function renderChips() {
-    const row = document.getElementById('categoryChips');
-    const cats = Array.from(new Set(goals.map(g => g.category).filter(Boolean)));
+  // Draws "All" plus each category; returns the active one (reset to "All" if it no longer exists).
+  function renderChips(rowId, cats, active, onPick) {
+    const row = document.getElementById(rowId);
     if (cats.length === 0) {
       row.style.display = 'none';
-      activeCategory = 'All';
-      return;
+      return 'All';
     }
+    if (active !== 'All' && !cats.includes(active)) active = 'All';
     row.style.display = 'flex';
-    const all = ['All', ...cats];
-    row.innerHTML = all.map(c => `<button class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
-    row.querySelectorAll('.chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeCategory = btn.dataset.cat;
-        render();
-      });
-    });
+    row.innerHTML = ['All', ...cats].map(c => `<button class="chip ${c === active ? 'active' : ''}" data-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+    row.querySelectorAll('.chip').forEach(btn => btn.addEventListener('click', () => { onPick(btn.dataset.cat); render(); }));
+    return active;
   }
 
   // ---------- Main render ----------
@@ -1119,23 +1341,30 @@
     indexPayments();
     renderGoals();
     renderBills();
+    renderBudgets();
     renderOverview();
   }
 
   function renderGoals() {
-    renderChips();
+    const live = liveGoals();
+    const cats = Array.from(new Set(live.map(g => g.category).filter(Boolean)));
+    activeCategory = renderChips('categoryChips', cats, activeCategory, c => { activeCategory = c; });
     const list = document.getElementById('goalList');
     const totalsEl = document.getElementById('totals');
 
-    if (goals.length === 0) {
+    renderArchive('goalArchive', 'goals', goals.filter(g => g.archived).map(g => ({
+      id: g.id, name: g.name, meta: g.category || 'Goal', amount: `${formatMoney(g.saved)} of ${formatMoney(g.target)}`
+    })), 'goals');
+
+    if (live.length === 0) {
       list.innerHTML = '<div class="empty"><div class="big">No goals yet</div>Tap "New goal" to start saving toward something.</div>';
       totalsEl.style.display = 'none';
       return;
     }
 
     totalsEl.style.display = 'flex';
-    const totalSaved = goals.reduce((s, g) => s + g.saved, 0);
-    const totalTarget = goals.reduce((s, g) => s + g.target, 0);
+    const totalSaved = live.reduce((s, g) => s + g.saved, 0);
+    const totalTarget = live.reduce((s, g) => s + g.target, 0);
     totalsEl.innerHTML = `
       <div class="item">
         <div class="num">${formatMoney(totalSaved)}</div>
@@ -1143,21 +1372,20 @@
       </div>
       <div class="item">
         <div class="num">${formatMoney(totalTarget)}</div>
-        <div class="lbl">across ${goals.length} goal${goals.length === 1 ? '' : 's'}</div>
+        <div class="lbl">across ${live.length} goal${live.length === 1 ? '' : 's'}</div>
       </div>
     `;
 
-    const displayed = activeCategory === 'All' ? goals : goals.filter(g => g.category === activeCategory);
-    const showReorder = activeCategory === 'All';
+    const displayed = activeCategory === 'All' ? live : live.filter(g => g.category === activeCategory);
 
     if (displayed.length === 0) {
       list.innerHTML = '<div class="empty">No goals in this category.</div>';
       return;
     }
 
-    list.innerHTML = displayed.map((g, idx) => {
-      const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
-      const done = g.saved >= g.target && g.target > 0;
+    list.innerHTML = displayed.map(g => {
+      const pct = LedgerCore.pctOf(g);
+      const done = LedgerCore.isDone(g);
       const plan = goalPlan(g);
       const by = plan.dueLabel ? ` to hit this by ${plan.dueLabel}` : '';
       let suggestion = '';
@@ -1167,31 +1395,34 @@
       else if (plan.savedThisPeriod > 0 && plan.planned > 0) suggestion = `${formatMoney(plan.savedThisPeriod)} of ${formatMoney(plan.planned)} saved this month${by}`;
       else if (plan.planned > 0) suggestion = `Save ${formatMoney(plan.planned)}/mo${by}`;
       const suggestionHtml = suggestion ? `<div class="suggestion-line ${plan.overdue ? 'overdue' : ''}">${suggestion}</div>` : '';
+      const projectionHtml = plan.projection
+        ? `<div class="projection-line ${plan.projection.tone === 'behind' ? 'behind' : ''}">${plan.projection.text}</div>` : '';
       let skipBtnHtml = '';
       if (plan.skip) skipBtnHtml = `<button class="btn-small unskip-goal" data-id="${plan.skip.id}">Unskip</button>`;
       else if (plan.planned > 0 && plan.savedThisPeriod < plan.planned) skipBtnHtml = `<button class="btn-small skip-goal" data-id="${g.id}">Skip month</button>`;
-      const reorderHtml = showReorder ? `
-        <button class="btn-icon reorder-up" data-id="${g.id}" ${idx === 0 ? 'disabled' : ''}>▲</button>
-        <button class="btn-icon reorder-down" data-id="${g.id}" ${idx === displayed.length - 1 ? 'disabled' : ''}>▼</button>
-      ` : '';
+      const handleHtml = displayed.length > 1
+        ? `<button class="drag-handle" data-id="${g.id}" aria-label="Reorder ${escapeHtml(g.name)} — drag, or use the arrow keys">⠿</button>` : '';
       return `
         <div class="goal ${done ? 'done' : ''}" data-id="${g.id}">
           <div class="goal-head">
             <div class="goal-name">${done ? '✓' : ''} ${escapeHtml(g.name)}</div>
             <div class="goal-head-actions">
-              ${reorderHtml}
+              ${handleHtml}
               <button class="btn-icon edit-goal" data-id="${g.id}">edit</button>
             </div>
           </div>
           ${g.category ? `<div class="badge-category">${escapeHtml(g.category)}</div>` : ''}
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
           ${suggestionHtml}
+          ${projectionHtml}
           <div class="goal-foot">
             <div class="goal-amounts"><span class="saved">${formatMoney(g.saved)}</span> of ${formatMoney(g.target)} · ${pct.toFixed(0)}%</div>
             <div class="goal-actions">
               <button class="btn-small history-btn" data-id="${g.id}">History</button>
               ${skipBtnHtml}
-              ${!done ? `<button class="btn-small add-deposit" data-id="${g.id}">+ Add</button>` : ''}
+              ${done
+                ? `<button class="btn-small archive-goal" data-id="${g.id}">Archive</button>`
+                : `<button class="btn-small add-deposit" data-id="${g.id}">+ Add</button>`}
             </div>
           </div>
         </div>
@@ -1201,10 +1432,24 @@
     list.querySelectorAll('.add-deposit').forEach(btn => btn.addEventListener('click', () => openDepositSheet(btn.dataset.id)));
     list.querySelectorAll('.edit-goal').forEach(btn => btn.addEventListener('click', () => openGoalSheet(btn.dataset.id)));
     list.querySelectorAll('.history-btn').forEach(btn => btn.addEventListener('click', () => openHistorySheet(btn.dataset.id)));
-    list.querySelectorAll('.reorder-up').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, -1)));
-    list.querySelectorAll('.reorder-down').forEach(btn => btn.addEventListener('click', () => moveGoal(btn.dataset.id, 1)));
     list.querySelectorAll('.skip-goal').forEach(btn => btn.addEventListener('click', () => skipGoal(btn)));
     list.querySelectorAll('.unskip-goal').forEach(btn => btn.addEventListener('click', () => unskipGoal(btn)));
+    list.querySelectorAll('.archive-goal').forEach(btn => btn.addEventListener('click', () => setArchived('goals', btn.dataset.id, true)));
+    list.querySelectorAll('.drag-handle').forEach(handle => {
+      handle.addEventListener('pointerdown', e => startGoalDrag(e, handle, list, displayed));
+      handle.addEventListener('keydown', e => {
+        const dir = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+        if (!dir) return;
+        e.preventDefault();
+        const from = displayed.findIndex(g => g.id === handle.dataset.id);
+        const to = from + dir;
+        if (to < 0 || to >= displayed.length) return;
+        reorderGoals(displayed, from, to).then(() => {
+          const moved = document.querySelector(`#goalList .drag-handle[data-id="${handle.dataset.id}"]`);
+          if (moved) moved.focus();
+        });
+      });
+    });
   }
 
   // ---------- Skipping a month ----------
@@ -1246,12 +1491,69 @@
   }
 
   // ---------- Reordering ----------
-  async function moveGoal(id, dir) {
-    const idx = goals.findIndex(g => g.id === id);
-    const otherIdx = idx + dir;
-    if (idx === -1 || otherIdx < 0 || otherIdx >= goals.length) return;
+  // Drag a card by its handle; the others slide out of the way. Dropping calls reorderGoals.
+  function startGoalDrag(e, handle, list, displayed) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const cards = [...list.querySelectorAll('.goal')];
+    const card = handle.closest('.goal');
+    const from = cards.indexOf(card);
+    const rects = cards.map(c => c.getBoundingClientRect());
+    const gap = cards.length > 1 ? rects[1].top - rects[0].bottom : 14;
+    const shift = rects[from].height + gap;
+    const startY = e.clientY;
+    let to = from;
+
+    handle.setPointerCapture(e.pointerId);
+    card.classList.add('dragging');
+    cards.forEach(c => { if (c !== card) c.classList.add('shifting'); });
+
+    function onMove(ev) {
+      const dy = ev.clientY - startY;
+      card.style.transform = `translateY(${dy}px)`;
+      const center = rects[from].top + rects[from].height / 2 + dy;
+      to = from;
+      for (let i = 0; i < cards.length; i++) {
+        if (i === from) continue;
+        const mid = rects[i].top + rects[i].height / 2;
+        if (i > from && center > mid) to = i;
+        if (i < from && center < mid && to === from) to = i;
+      }
+      cards.forEach((c, i) => {
+        if (i === from) return;
+        let y = 0;
+        if (from < to && i > from && i <= to) y = -shift;
+        if (to < from && i >= to && i < from) y = shift;
+        c.style.transform = y ? `translateY(${y}px)` : '';
+      });
+    }
+
+    function onUp() {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.removeEventListener('pointercancel', onUp);
+      cards.forEach(c => { c.style.transform = ''; c.classList.remove('dragging', 'shifting'); });
+      if (to !== from) reorderGoals(displayed, from, to);
+    }
+
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+    handle.addEventListener('pointercancel', onUp);
+  }
+
+  // Moves displayed[from] to position `to`. With a category filter on, the filtered goals swap among the
+  // places they already hold in the full order, so goals outside the filter don't move.
+  async function reorderGoals(displayed, from, to) {
+    const ids = displayed.map(g => g.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    const byId = new Map(goals.map(g => [g.id, g]));
+    const slots = goals.map((g, i) => (ids.includes(g.id) ? i : -1)).filter(i => i >= 0);
     const before = goals.map(g => ({ g, sortOrder: g.sortOrder }));
-    [goals[idx], goals[otherIdx]] = [goals[otherIdx], goals[idx]];
+
+    const next = goals.slice();
+    slots.forEach((slot, k) => { next[slot] = byId.get(ids[k]); });
+    goals = next;
     // Renumber 1..n so goals that shared a sort_order still end up in a definite order.
     const changed = goals.filter((g, i) => g.sortOrder !== i + 1);
     goals.forEach((g, i) => { g.sortOrder = i + 1; });
@@ -1356,6 +1658,10 @@
     }
   });
 
+  document.getElementById('archiveGoal').addEventListener('click', async () => {
+    if (editingGoalId && await setArchived('goals', editingGoalId, true)) closeGoalSheet();
+  });
+
   document.getElementById('deleteGoal').addEventListener('click', async () => {
     if (!editingGoalId) return;
     const idToDelete = editingGoalId;
@@ -1423,18 +1729,16 @@
     const g = goals.find(x => x.id === depositGoalId);
     const saveBtn = document.getElementById('saveDeposit');
     saveBtn.disabled = true;
+    // The database adjusts the goal's saved total itself whenever a deposit changes; mirror it locally.
     try {
       if (editingDepositId) {
-        const diff = amount - editingDepositOriginalAmount;
         await updateDepositRemote(editingDepositId, { amount, note: note || null });
-        await updateGoalRemote(g.id, { saved: g.saved + diff });
-        g.saved += diff;
+        g.saved += amount - editingDepositOriginalAmount;
         const inPeriod = periodDeposits.find(d => d.id === editingDepositId);
         if (inPeriod) inPeriod.amount = amount; // a skip given an amount becomes a normal deposit
         showToast('Entry updated');
       } else {
         periodDeposits.push(await createDepositRemote(g.id, amount, note));
-        await updateGoalRemote(g.id, { saved: g.saved + amount });
         g.saved += amount;
         showToast(`${amount > 0 ? 'Added' : 'Adjusted'} ${formatMoney(amount)} — ${g.name}`);
       }
@@ -1453,7 +1757,6 @@
     if (!(await askConfirm('Delete this entry?', `It will be taken off ${g.name}'s saved total.`, 'Delete', true))) return;
     try {
       await deleteDepositRemote(editingDepositId);
-      await updateGoalRemote(g.id, { saved: g.saved - editingDepositOriginalAmount });
       g.saved -= editingDepositOriginalAmount;
       periodDeposits = periodDeposits.filter(d => d.id !== editingDepositId);
       render();
@@ -1468,15 +1771,35 @@
   const historyOverlay = document.getElementById('historyOverlay');
   const historyGoalName = document.getElementById('historyGoalName');
   const historyList = document.getElementById('historyList');
+  const historyChart = document.getElementById('historyChart');
+
+  // Running total over time, stepping up at each deposit, with the target as a reference line.
+  function drawGoalGrowth(goal, deposits) {
+    const real = deposits.filter(d => d.amount !== 0).slice().reverse(); // oldest first
+    if (real.length < 2) { clearChart(historyChart); return; }
+    let total = 0;
+    const points = real.map(d => {
+      total += d.amount;
+      return { x: new Date(d.createdAt), y: total, tip: `<div class="tip-title">${formatDate(d.createdAt)}</div>
+        <div class="tip-row"><span>${d.amount > 0 ? 'Added' : 'Taken out'}</span><b>${formatMoney(Math.abs(d.amount))}</b></div>
+        <div class="tip-row"><span>Saved</span><b>${formatMoney(total)}</b></div>` };
+    });
+    mountChart(historyChart, {
+      kind: 'line', points, target: goal.target, height: 150,
+      label: `${goal.name}: saved over time, now ${formatMoney(total)} of ${formatMoney(goal.target)}`
+    });
+  }
 
   async function openHistorySheet(goalId) {
     historyGoalId = goalId;
     const g = goals.find(x => x.id === goalId);
     historyGoalName.textContent = g.name;
     historyList.innerHTML = '<div class="history-empty">Loading…</div>';
+    clearChart(historyChart);
     historyOverlay.classList.add('open');
     try {
       const deposits = await loadDeposits(goalId);
+      drawGoalGrowth(g, deposits);
       if (deposits.length === 0) {
         historyList.innerHTML = '<div class="history-empty">No entries yet.</div>';
         return;
@@ -1508,10 +1831,25 @@
   historyOverlay.addEventListener('click', (e) => { if (e.target === historyOverlay) historyOverlay.classList.remove('open'); });
 
   // ---------- Bills render ----------
+  const UNCATEGORISED = 'Uncategorised';
+  const billSearch = document.getElementById('billSearch');
+  billSearch.addEventListener('input', () => { billQuery = billSearch.value.trim().toLowerCase(); renderBills(); });
+
   function renderBills() {
     const list = document.getElementById('billList');
     const totalsEl = document.getElementById('billTotals');
-    const billsOnly = bills.filter(b => b.kind === 'bill');
+    const billsOnly = bills.filter(b => b.kind === 'bill' && !b.archived);
+
+    const archived = bills.filter(b => b.archived && !isPay(b));
+    renderArchive('billArchive', 'bills', archived.map(b => ({
+      id: b.id, name: b.name, amount: formatMoney(b.amount),
+      meta: [b.kind === 'income' ? 'Income' : '', FREQUENCY_LABELS[b.frequency], b.category].filter(Boolean).join(' · ')
+    })), archived.some(b => b.kind === 'income') ? 'bills & income' : 'bills');
+    renderBillTrends(billsOnly);
+
+    const cats = Array.from(new Set(billsOnly.map(b => b.category).filter(Boolean)));
+    activeBillCategory = renderChips('billChips', cats, activeBillCategory, c => { activeBillCategory = c; });
+    billSearch.style.display = billsOnly.length > 6 || billQuery ? 'block' : 'none';
 
     if (billsOnly.length === 0) {
       list.innerHTML = '<div class="empty"><div class="big">No bills yet</div>Tap "New bill" to add your regular outgoings.</div>';
@@ -1519,15 +1857,20 @@
       return;
     }
 
+    const shown = billsOnly.filter(b =>
+      (activeBillCategory === 'All' || b.category === activeBillCategory) &&
+      (!billQuery || b.name.toLowerCase().includes(billQuery) || b.category.toLowerCase().includes(billQuery)));
+
     const today = startOfToday();
     const horizon = addDays(today, 30);
-    const monthly = monthlyAverage(billsOnly, today);
-    const outstanding = billsOnly.reduce((s, b) => s + b.amount * unpaidBetween(b, trackFrom(b), horizon).length, 0);
+    const monthly = monthlyAverage(shown, today);
+    const outstanding = shown.reduce((s, b) => s + b.amount * unpaidBetween(b, trackFrom(b), horizon).length, 0);
+    const scope = activeBillCategory === 'All' ? '' : ` · ${escapeHtml(activeBillCategory)}`;
     totalsEl.style.display = 'flex';
     totalsEl.innerHTML = `
       <div class="item">
         <div class="num">${formatMoney(monthly)}</div>
-        <div class="lbl">a month, on average</div>
+        <div class="lbl">a month, on average${scope}</div>
       </div>
       <div class="item">
         <div class="num">${formatMoney(outstanding)}</div>
@@ -1535,8 +1878,13 @@
       </div>
     `;
 
+    if (shown.length === 0) {
+      list.innerHTML = `<div class="empty">No bills match${billQuery ? ` "${escapeHtml(billSearch.value.trim())}"` : ''}.</div>`;
+      return;
+    }
+
     // Next unpaid soonest first (overdue at the top); paid-off and finished bills sink to the bottom.
-    const rows = billsOnly.map(b => ({ b, due: firstUnpaid(b) }))
+    const rows = shown.map(b => ({ b, due: firstUnpaid(b) }))
       .sort((x, y) => (!x.due - !y.due) || (x.due - y.due));
 
     list.innerHTML = rows.map(({ b, due }) => {
@@ -1547,6 +1895,7 @@
       else status = dueLabel(due, today);
       const left = due && b.endDate && b.frequency !== 'once' ? unpaidBetween(b, due, parseLocalDate(b.endDate)).length : 0;
       const hasPayments = payments.some(p => p.billId === b.id);
+      const dueISO = due ? toISODate(due) : '';
       return `
         <div class="goal ${soon ? 'soon' : ''} ${overdue ? 'overdue' : ''} ${!due ? 'past' : ''}">
           <div class="goal-head">
@@ -1560,11 +1909,12 @@
             <div class="bill-due">${FREQUENCY_LABELS[b.frequency]} · ${status}${left ? ` · ${left} left` : ''}</div>
             <div class="bill-amount">${formatMoney(b.amount)}</div>
           </div>
-          ${hasPayments || due ? `
           <div class="bill-actions">
             ${hasPayments ? `<button class="btn-small bill-history-btn" data-id="${b.id}">Payments</button>` : ''}
-            ${due ? `<button class="btn-small mark-paid" data-id="${b.id}" data-date="${toISODate(due)}">Mark paid</button>` : ''}
-          </div>` : ''}
+            ${due ? `<button class="btn-small pay-other" data-id="${b.id}" data-date="${dueISO}">Other amount</button>
+                     <button class="btn-small mark-paid" data-id="${b.id}" data-date="${dueISO}">Mark paid</button>`
+                  : `<button class="btn-small archive-bill" data-id="${b.id}">Archive</button>`}
+          </div>
         </div>
       `;
     }).join('');
@@ -1572,6 +1922,8 @@
     list.querySelectorAll('.edit-bill').forEach(btn => btn.addEventListener('click', () => openBillSheet(btn.dataset.id)));
     list.querySelectorAll('.bill-history-btn').forEach(btn => btn.addEventListener('click', () => openBillHistory(btn.dataset.id)));
     list.querySelectorAll('.mark-paid').forEach(btn => btn.addEventListener('click', () => markPaid(btn)));
+    list.querySelectorAll('.pay-other').forEach(btn => btn.addEventListener('click', () => openPaymentSheet(btn.dataset.id, btn.dataset.date, null)));
+    list.querySelectorAll('.archive-bill').forEach(btn => btn.addEventListener('click', () => setArchived('bills', btn.dataset.id, true)));
   }
 
   async function markPaid(btn) {
@@ -1588,12 +1940,152 @@
     }
   }
 
+  // ---------- Bill trends ----------
+  // Bills by month (recorded amounts where paid, the usual amount otherwise) and the monthly average by category.
+  function renderBillTrends(billsOnly) {
+    const el = document.getElementById('billTrends');
+    if (billsOnly.length === 0) { el.innerHTML = ''; return; }
+    const today = startOfToday();
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    // Up to six months back, but not before the earliest bill started being tracked.
+    const earliest = billsOnly.reduce((m, b) => Math.min(m, +trackFrom(b)), Infinity);
+    let back = 5;
+    while (back > 0 && new Date(thisMonth.getFullYear(), thisMonth.getMonth() - back + 1, 1) <= earliest) back--;
+    const months = [];
+    for (let i = -back; i <= 5; i++) months.push(new Date(thisMonth.getFullYear(), thisMonth.getMonth() + i, 1));
+
+    const columns = months.map(m => {
+      const end = lastDayOfMonth(m.getFullYear(), m.getMonth());
+      const byCat = new Map();
+      let total = 0;
+      billsOnly.forEach(b => {
+        const from = new Date(Math.max(+m, +trackFrom(b)));
+        occurrencesBetween(b, from, end).forEach(d => {
+          const p = paymentFor(b, d);
+          const amt = p ? p.amount : b.amount;
+          const cat = b.category || UNCATEGORISED;
+          byCat.set(cat, (byCat.get(cat) || 0) + amt);
+          total += amt;
+        });
+      });
+      const sorted = [...byCat.entries()].sort((x, y) => y[1] - x[1]);
+      const top = sorted.slice(0, 4);
+      const rest = sorted.slice(4).reduce((s, [, v]) => s + v, 0);
+      if (rest) top.push(['Other', rest]);
+      const past = m < thisMonth;
+      const name = m.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      return {
+        label: m.toLocaleDateString('en-GB', { month: 'short' }),
+        value: total,
+        faded: !past,
+        current: +m === +thisMonth,
+        tip: `<div class="tip-title">${name}${past ? '' : ' · expected'}</div>
+          <div class="tip-row"><span>Total</span><b>${formatMoney(total)}</b></div>
+          ${top.map(([c, v]) => `<div class="tip-row"><span>${escapeHtml(c)}</span><b>${formatMoney(v)}</b></div>`).join('')}`
+      };
+    });
+
+    // Monthly average per category.
+    const groups = new Map();
+    billsOnly.forEach(b => {
+      const cat = b.category || UNCATEGORISED;
+      groups.set(cat, (groups.get(cat) || []).concat(b));
+    });
+    const cats = [...groups.entries()].map(([cat, list]) => ({ cat, monthly: monthlyAverage(list, today) }))
+      .filter(c => c.monthly > 0).sort((x, y) => y.monthly - x.monthly);
+    const maxCat = cats.length ? cats[0].monthly : 0;
+
+    el.innerHTML = `
+      <h3 class="section-title">By month</h3>
+      <div class="statement chart-box">
+        <div class="chart-legend"><span><span class="key"></span>Past</span><span><span class="key faded"></span>This month on, expected</span></div>
+        <div class="chart" id="billMonthChart"></div>
+      </div>
+      ${cats.length > 1 ? `
+      <h3 class="section-title">By category <span style="color: var(--ink-soft); font-weight: 400; font-size: 13px;">a month, on average</span></h3>
+      <div class="statement">
+        ${cats.map(c => `
+          <div class="cat-row ${c.cat === activeBillCategory ? 'active' : ''}" data-cat="${escapeHtml(c.cat)}" role="button" tabindex="0">
+            <div class="cat-head"><span>${escapeHtml(c.cat)}</span><span class="amt">${formatMoney(c.monthly)}</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:${(c.monthly / maxCat) * 100}%"></div></div>
+          </div>`).join('')}
+      </div>` : ''}
+    `;
+    mountChart(document.getElementById('billMonthChart'), {
+      kind: 'columns', columns, height: 150,
+      label: `Bills by month, ${columns[0].label} to ${columns[columns.length - 1].label}`
+    });
+    // Tapping a category filters the list above (uncategorised bills have no chip to match).
+    el.querySelectorAll('.cat-row').forEach(row => {
+      const pick = () => {
+        if (row.dataset.cat === UNCATEGORISED) return;
+        activeBillCategory = activeBillCategory === row.dataset.cat ? 'All' : row.dataset.cat;
+        render();
+        document.getElementById('billsView').scrollIntoView({ behavior: 'smooth' });
+      };
+      row.addEventListener('click', pick);
+      row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    });
+  }
+
+  // ---------- Payment amount sheet ----------
+  // Records a payment for a bill's due date at a different amount, or changes one already recorded.
+  const paymentOverlay = document.getElementById('paymentOverlay');
+  const paymentAmountInput = document.getElementById('paymentAmountInput');
+  let paymentTarget = null; // { bill, dueISO, payment }
+
+  function openPaymentSheet(billId, dueISO, paymentId) {
+    const bill = bills.find(b => b.id === billId);
+    const payment = paymentId ? payments.find(p => p.id === paymentId) : null;
+    paymentTarget = { bill, dueISO: payment ? payment.dueDate : dueISO, payment };
+    const due = parseLocalDate(paymentTarget.dueISO);
+    document.getElementById('paymentSheetTitle').textContent = `${payment ? 'Edit payment' : 'Paid'} — ${bill.name}`;
+    document.getElementById('paymentHint').textContent =
+      `Due ${due.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} · usually ${formatMoney(bill.amount)}`;
+    paymentAmountInput.value = payment ? payment.amount : bill.amount;
+    paymentOverlay.classList.add('open');
+    setTimeout(() => { paymentAmountInput.focus(); paymentAmountInput.select(); }, 100);
+  }
+
+  function closePaymentSheet() {
+    paymentOverlay.classList.remove('open');
+    paymentTarget = null;
+  }
+
+  document.getElementById('cancelPayment').addEventListener('click', closePaymentSheet);
+  paymentOverlay.addEventListener('click', (e) => { if (e.target === paymentOverlay) closePaymentSheet(); });
+
+  document.getElementById('savePayment').addEventListener('click', async () => {
+    const amount = parseFloat(paymentAmountInput.value);
+    if (!(amount >= 0) || paymentAmountInput.value.trim() === '') { showToast('Enter an amount'); return; }
+    const { bill, dueISO, payment } = paymentTarget;
+    const saveBtn = document.getElementById('savePayment');
+    saveBtn.disabled = true;
+    try {
+      if (payment) {
+        await updatePaymentRemote(payment.id, { amount });
+        payment.amount = amount;
+      } else {
+        payments.unshift(await createPaymentRemote(bill.id, dueISO, amount));
+      }
+      render();
+      if (billHistoryOverlay.classList.contains('open')) renderBillHistory();
+      closePaymentSheet();
+      showToast(`Paid ${bill.name} — ${formatMoney(amount)}`);
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
   // ---------- Overview render ----------
   function renderOverview() {
     const el = document.getElementById('overviewContent');
     const today = startOfToday();
-    const billsOnly = bills.filter(b => b.kind === 'bill');
-    const otherIncome = bills.filter(b => b.kind === 'income' && !isPay(b));
+    const billsOnly = bills.filter(b => b.kind === 'bill' && !b.archived);
+    const otherIncome = bills.filter(b => b.kind === 'income' && !isPay(b) && !b.archived);
 
     const period = currentPayPeriod();
     const neg = n => n < 0 ? 'negative' : '';
@@ -1619,7 +2111,7 @@
     const leftOver = (pay ? pay.amount : 0) + otherTotal - periodBillsTotal;
     // Goals: this period's plans, plus anything saved beyond them.
     let goalsMonthly = 0, goalsSaved = 0, skippedCount = 0;
-    goals.forEach(g => {
+    liveGoals().forEach(g => {
       const plan = goalPlan(g);
       goalsMonthly += plan.committed;
       goalsSaved += Math.max(0, plan.savedThisPeriod);
@@ -1630,6 +2122,14 @@
       goalsSaved > 0 ? `${formatMoney(goalsSaved)} saved so far` : '',
       skippedCount ? `${skippedCount} skipped` : ''
     ].filter(Boolean).join(' · ');
+    // Budgets: each allowance, or what's been spent if that's more.
+    let budgetsCommitted = 0, budgetsSpent = 0;
+    liveBudgets().forEach(b => {
+      const use = budgetUse(b);
+      budgetsCommitted += use.committed;
+      budgetsSpent += use.spent;
+    });
+    const setAside = goalsMonthly + budgetsCommitted;
 
     html += `
       <h3 class="section-title" style="margin-top: 0;">Pay period <span style="color: var(--ink-soft); font-weight: 400; font-size: 13px;">${periodLabel}</span></h3>
@@ -1660,10 +2160,16 @@
         <div class="statement-row">
           <div>Goals<span class="meta">${goalsMeta}</span></div>
           <div class="amt">−${formatMoney(goalsMonthly)}</div>
-        </div>
+        </div>` : ''}
+        ${budgetsCommitted > 0 ? `
+        <div class="statement-row">
+          <div>Budgets<span class="meta">${formatMoney(budgetsSpent)} spent so far</span></div>
+          <div class="amt">−${formatMoney(budgetsCommitted)}</div>
+        </div>` : ''}
+        ${setAside > 0 ? `
         <div class="statement-row total">
           <div>Free to spend</div>
-          <div class="amt ${neg(leftOver - goalsMonthly)}">${formatMoney(leftOver - goalsMonthly)}</div>
+          <div class="amt ${neg(leftOver - setAside)}">${formatMoney(leftOver - setAside)}</div>
         </div>` : ''}
       </div>
     `;
@@ -1724,6 +2230,14 @@
     const pastPay = bills.filter(b => isPay(b) && b.startDate < paydayISO)
       .sort((x, y) => (x.startDate < y.startDate ? 1 : -1))
       .slice(0, 6);
+    // The last year of pay, this month included, as a chart above the list.
+    const payHistory = bills.filter(b => isPay(b) && b.startDate <= paydayISO)
+      .sort((x, y) => (x.startDate < y.startDate ? -1 : 1))
+      .slice(-12);
+    if (payHistory.length >= 2) {
+      html += `<h3 class="section-title">Pay over time</h3>
+        <div class="statement chart-box"><div class="chart" id="payChart"></div></div>`;
+    }
     if (pastPay.length) {
       html += `<h3 class="section-title">Previous pay</h3><div class="statement">` + pastPay.map(b => `
         <div class="statement-row">
@@ -1756,6 +2270,21 @@
     html += '<button class="add-goal-btn" id="openAddIncome" style="margin-top: 0;">+ Add other income</button>';
 
     el.innerHTML = html;
+    if (payHistory.length >= 2) {
+      mountChart(document.getElementById('payChart'), {
+        kind: 'columns', height: 140,
+        label: `Pay for the last ${payHistory.length} months`,
+        columns: payHistory.map(b => {
+          const d = parseLocalDate(b.startDate);
+          return {
+            label: d.toLocaleDateString('en-GB', { month: 'short' }),
+            value: b.amount,
+            current: b.startDate === paydayISO,
+            tip: `<div class="tip-title">${monthLabel(d)}</div><div class="tip-row"><span>Pay</span><b>${formatMoney(b.amount)}</b></div>`
+          };
+        })
+      });
+    }
     el.querySelectorAll('.mark-paid').forEach(btn => btn.addEventListener('click', () => markPaid(btn)));
     el.querySelectorAll('.edit-bill').forEach(btn => btn.addEventListener('click', () => openBillSheet(btn.dataset.id)));
     el.querySelectorAll('.add-pay').forEach(btn => btn.addEventListener('click', () => openPaySheet(null, btn.dataset.date)));
@@ -1859,9 +2388,15 @@
           <div class="amt">${formatMoney(p.amount)}</div>
           <div class="meta">Due ${fmt(parseLocalDate(p.dueDate))} · marked paid ${fmt(new Date(p.paidAt))}</div>
         </div>
-        <button class="btn-icon undo-payment" data-id="${p.id}">undo</button>
+        <div class="row-end" style="display:flex; gap:2px;">
+          <button class="btn-icon edit-payment" data-id="${p.id}">edit</button>
+          <button class="btn-icon undo-payment" data-id="${p.id}">undo</button>
+        </div>
       </div>
     `).join('');
+    billHistoryList.querySelectorAll('.edit-payment').forEach(btn => btn.addEventListener('click', () => {
+      openPaymentSheet(historyBillId, null, btn.dataset.id);
+    }));
     billHistoryList.querySelectorAll('.undo-payment').forEach(btn => btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
@@ -1971,6 +2506,10 @@
     }
   });
 
+  document.getElementById('archiveBill').addEventListener('click', async () => {
+    if (editingBillId && await setArchived('bills', editingBillId, true)) closeBillSheet();
+  });
+
   document.getElementById('deleteBill').addEventListener('click', async () => {
     if (!editingBillId) return;
     const idToDelete = editingBillId;
@@ -1989,14 +2528,453 @@
     }
   });
 
+  // ---------- Budgets render ----------
+  function renderBudgets() {
+    const list = document.getElementById('budgetList');
+    const totalsEl = document.getElementById('budgetTotals');
+    const live = liveBudgets();
+
+    renderArchive('budgetArchive', 'budgets', budgets.filter(b => b.archived).map(b => ({
+      id: b.id, name: b.name, meta: 'Budget', amount: `${formatMoney(b.amount)}/mo`
+    })), 'budgets');
+
+    if (live.length === 0) {
+      list.innerHTML = '<div class="empty"><div class="big">No budgets yet</div>Tap "New budget" to give yourself a monthly allowance for things like groceries or eating out.</div>';
+      totalsEl.style.display = 'none';
+      return;
+    }
+
+    const period = currentPayPeriod();
+    const daysLeft = Math.round((period.nextPayday - startOfToday()) / 86400000);
+    const totalBudget = live.reduce((s, b) => s + b.amount, 0);
+    const totalSpent = live.reduce((s, b) => s + budgetUse(b).spent, 0);
+    totalsEl.style.display = 'flex';
+    totalsEl.innerHTML = `
+      <div class="item">
+        <div class="num">${formatMoney(totalSpent)}</div>
+        <div class="lbl">spent of ${formatMoney(totalBudget)}</div>
+      </div>
+      <div class="item">
+        <div class="num">${formatMoney(totalBudget - totalSpent)}</div>
+        <div class="lbl">left · ${daysLeft} day${daysLeft === 1 ? '' : 's'} to payday</div>
+      </div>
+    `;
+
+    list.innerHTML = live.map(b => {
+      const use = budgetUse(b);
+      const pct = Math.min(100, Math.max(0, (use.spent / b.amount) * 100));
+      const line = use.over
+        ? `${formatMoney(-use.left)} over budget`
+        : `${formatMoney(use.left)} left${daysLeft > 0 ? ` · about ${formatMoney(use.left / daysLeft)} a day` : ''}`;
+      return `
+        <div class="goal ${use.over ? 'over' : ''}">
+          <div class="goal-head">
+            <div class="goal-name">${escapeHtml(b.name)}</div>
+            <div class="goal-head-actions">
+              <button class="btn-icon edit-budget" data-id="${b.id}">edit</button>
+            </div>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <div class="suggestion-line">${line}</div>
+          <div class="goal-foot">
+            <div class="goal-amounts"><span class="saved">${formatMoney(use.spent)}</span> of ${formatMoney(b.amount)}</div>
+            <div class="goal-actions">
+              <button class="btn-small spend-history" data-id="${b.id}">History</button>
+              <button class="btn-small add-spend" data-id="${b.id}">+ Spend</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.edit-budget').forEach(btn => btn.addEventListener('click', () => openBudgetSheet(btn.dataset.id)));
+    list.querySelectorAll('.add-spend').forEach(btn => btn.addEventListener('click', () => openSpendSheet(btn.dataset.id, null)));
+    list.querySelectorAll('.spend-history').forEach(btn => btn.addEventListener('click', () => openSpendHistory(btn.dataset.id)));
+  }
+
+  // ---------- Budget sheet ----------
+  const budgetOverlay = document.getElementById('budgetOverlay');
+  const budgetNameInput = document.getElementById('budgetNameInput');
+  const budgetAmountInput = document.getElementById('budgetAmountInput');
+
+  function openBudgetSheet(id) {
+    editingBudgetId = id || null;
+    const b = id ? budgets.find(x => x.id === id) : null;
+    document.getElementById('budgetSheetTitle').textContent = b ? 'Edit budget' : 'New budget';
+    budgetNameInput.value = b ? b.name : '';
+    budgetAmountInput.value = b ? b.amount : '';
+    document.getElementById('deleteBudgetRow').style.display = b ? 'flex' : 'none';
+    budgetOverlay.classList.add('open');
+    setTimeout(() => budgetNameInput.focus(), 100);
+  }
+
+  function closeBudgetSheet() {
+    budgetOverlay.classList.remove('open');
+    editingBudgetId = null;
+  }
+
+  document.getElementById('openAddBudget').addEventListener('click', () => openBudgetSheet(null));
+  document.getElementById('cancelBudget').addEventListener('click', closeBudgetSheet);
+  budgetOverlay.addEventListener('click', (e) => { if (e.target === budgetOverlay) closeBudgetSheet(); });
+
+  document.getElementById('saveBudget').addEventListener('click', async () => {
+    const name = budgetNameInput.value.trim();
+    const amount = parseFloat(budgetAmountInput.value);
+    if (!name) { showToast('Give the budget a name'); return; }
+    if (!(amount > 0)) { showToast('Enter a monthly amount'); return; }
+    const saveBtn = document.getElementById('saveBudget');
+    saveBtn.disabled = true;
+    try {
+      if (editingBudgetId) {
+        await saveRow('budgets', editingBudgetId, { name, amount });
+        Object.assign(budgets.find(x => x.id === editingBudgetId), { name, amount });
+      } else {
+        const sortOrder = budgets.length ? Math.max(...budgets.map(b => b.sortOrder)) + 1 : 1;
+        budgets.push(fromBudgetRow(await saveRow('budgets', null, { name, amount, sort_order: sortOrder })));
+      }
+      render();
+      closeBudgetSheet();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('archiveBudget').addEventListener('click', async () => {
+    if (editingBudgetId && await setArchived('budgets', editingBudgetId, true)) closeBudgetSheet();
+  });
+
+  document.getElementById('deleteBudget').addEventListener('click', async () => {
+    if (!editingBudgetId) return;
+    const idToDelete = editingBudgetId;
+    const b = budgets.find(x => x.id === idToDelete);
+    if (!(await askConfirm(`Delete ${b.name}?`, "This removes the budget and all of its spending history. It can't be undone.", 'Delete', true))) return;
+    try {
+      await deleteRow('budgets', idToDelete);
+      budgets = budgets.filter(x => x.id !== idToDelete);
+      periodSpends = periodSpends.filter(s => s.budgetId !== idToDelete);
+      render();
+      closeBudgetSheet();
+      showToast('Budget deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- Spend sheet (add + edit) ----------
+  const spendOverlay = document.getElementById('spendOverlay');
+  const spendAmountInput = document.getElementById('spendAmountInput');
+  const spendNoteInput = document.getElementById('spendNoteInput');
+  const spendDateInput = document.getElementById('spendDateInput');
+  let editingSpend = null;
+
+  function openSpendSheet(budgetId, spend) {
+    spendBudgetId = budgetId;
+    editingSpend = spend;
+    editingSpendId = spend ? spend.id : null;
+    const b = budgets.find(x => x.id === budgetId);
+    document.getElementById('spendSheetTitle').textContent = `${spend ? 'Edit entry' : 'Spent'} — ${b.name}`;
+    document.getElementById('saveSpend').textContent = spend ? 'Save' : 'Add';
+    spendAmountInput.value = spend ? spend.amount : '';
+    spendNoteInput.value = spend ? spend.note : '';
+    spendDateInput.value = spend ? spend.spentOn : toISODate(startOfToday());
+    document.getElementById('deleteSpendRow').style.display = spend ? 'flex' : 'none';
+    spendOverlay.classList.add('open');
+    setTimeout(() => spendAmountInput.focus(), 100);
+  }
+
+  function closeSpendSheet() {
+    spendOverlay.classList.remove('open');
+    editingSpend = null;
+    editingSpendId = null;
+  }
+
+  // Keeps periodSpends to the entries dated in this pay period.
+  function syncPeriodSpend(spend) {
+    periodSpends = periodSpends.filter(s => s.id !== spend.id);
+    if (spend.spentOn >= toISODate(currentPayPeriod().start)) periodSpends.push(spend);
+  }
+
+  function afterSpendChange() {
+    render();
+    if (spendHistoryOverlay.classList.contains('open')) openSpendHistory(spendHistoryBudgetId);
+  }
+
+  document.getElementById('cancelSpend').addEventListener('click', closeSpendSheet);
+  spendOverlay.addEventListener('click', (e) => { if (e.target === spendOverlay) closeSpendSheet(); });
+
+  document.getElementById('saveSpend').addEventListener('click', async () => {
+    const amount = parseFloat(spendAmountInput.value);
+    const note = spendNoteInput.value.trim();
+    const spentOn = spendDateInput.value;
+    if (!amount) { showToast('Enter an amount'); return; }
+    if (hasBadDate(spendDateInput) || !spentOn) { showToast('Pick a date'); return; }
+    const b = budgets.find(x => x.id === spendBudgetId);
+    const saveBtn = document.getElementById('saveSpend');
+    saveBtn.disabled = true;
+    try {
+      const fields = { amount, note: note || null, spent_on: spentOn };
+      if (editingSpendId) {
+        await saveRow('spends', editingSpendId, fields);
+        syncPeriodSpend({ ...editingSpend, amount, note, spentOn });
+        showToast('Entry updated');
+      } else {
+        syncPeriodSpend(fromSpendRow(await saveRow('spends', null, { ...fields, budget_id: b.id })));
+        showToast(`${amount > 0 ? 'Spent' : 'Refunded'} ${formatMoney(Math.abs(amount))} — ${b.name}`);
+      }
+      closeSpendSheet();
+      afterSpendChange();
+    } catch (e) {
+      showToast("Couldn't save — check your connection");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  document.getElementById('deleteSpend').addEventListener('click', async () => {
+    if (!editingSpendId) return;
+    const id = editingSpendId;
+    if (!(await askConfirm('Delete this entry?', 'It will be taken off what you\'ve spent.', 'Delete', true))) return;
+    try {
+      await deleteRow('spends', id);
+      periodSpends = periodSpends.filter(s => s.id !== id);
+      closeSpendSheet();
+      afterSpendChange();
+      showToast('Entry deleted');
+    } catch (e) {
+      showToast("Couldn't delete — check your connection");
+    }
+  });
+
+  // ---------- Spend history sheet ----------
+  const spendHistoryOverlay = document.getElementById('spendHistoryOverlay');
+  const spendHistoryList = document.getElementById('spendHistoryList');
+
+  async function openSpendHistory(budgetId) {
+    spendHistoryBudgetId = budgetId;
+    const b = budgets.find(x => x.id === budgetId);
+    document.getElementById('spendHistoryName').textContent = b.name;
+    spendHistoryList.innerHTML = '<div class="history-empty">Loading…</div>';
+    spendHistoryOverlay.classList.add('open');
+    try {
+      const spends = await loadSpends(budgetId);
+      if (spends.length === 0) {
+        spendHistoryList.innerHTML = '<div class="history-empty">Nothing spent yet.</div>';
+        return;
+      }
+      const fmt = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      spendHistoryList.innerHTML = spends.map(s => `
+        <div class="history-item">
+          <div class="history-main">
+            <div class="amt ${s.amount < 0 ? 'negative' : ''}">${s.amount < 0 ? 'Refund ' : ''}${formatMoney(Math.abs(s.amount))}</div>
+            <div class="meta">${fmt(parseLocalDate(s.spentOn))}${s.note ? ' · ' + escapeHtml(s.note) : ''}</div>
+          </div>
+          <button class="btn-icon edit-spend" data-id="${s.id}">edit</button>
+        </div>
+      `).join('');
+      spendHistoryList.querySelectorAll('.edit-spend').forEach(btn => btn.addEventListener('click', () => {
+        openSpendSheet(budgetId, spends.find(s => s.id === btn.dataset.id));
+      }));
+    } catch (e) {
+      spendHistoryList.innerHTML = '<div class="history-empty">Couldn\'t load spending.</div>';
+    }
+  }
+
+  document.getElementById('closeSpendHistory').addEventListener('click', () => spendHistoryOverlay.classList.remove('open'));
+  spendHistoryOverlay.addEventListener('click', (e) => { if (e.target === spendHistoryOverlay) spendHistoryOverlay.classList.remove('open'); });
+
+  // ---------- Charts ----------
+  // Small inline-SVG charts drawn at their container's real width, redrawn when it changes size
+  // (including when a hidden tab is first shown). Hover or tap a mark for its tooltip.
+  //   columns: { kind: 'columns', columns: [{ label, value, faded?, current?, tip }], height, label }
+  //   line:    { kind: 'line', points: [{ x: Date, y, tip }], target?, height, label }
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const chartTip = document.getElementById('chartTip');
+  const chartObserver = new ResizeObserver(entries => entries.forEach(e => {
+    if (!e.target.isConnected) chartObserver.unobserve(e.target);
+    else drawChart(e.target);
+  }));
+
+  function mountChart(el, spec) {
+    el._chart = spec;
+    el._width = 0;
+    drawChart(el);
+    chartObserver.observe(el);
+  }
+
+  function clearChart(el) {
+    el._chart = null;
+    el.innerHTML = '';
+    chartObserver.unobserve(el);
+  }
+
+  // Rounds up to a clean number (an even multiple of a round step), so the top and middle ticks stay tidy.
+  function niceCeil(v) {
+    if (v <= 0) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v)));
+    return [1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10].map(m => m * p).find(n => n >= v);
+  }
+
+  function axisMoney(n) {
+    return n >= 10000 ? '£' + (n / 1000).toLocaleString('en-GB', { maximumFractionDigits: 1 }) + 'k' : formatMoney(n);
+  }
+
+  function svgEl(name, attrs, parent) {
+    const node = document.createElementNS(SVG_NS, name);
+    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+    if (parent) parent.appendChild(node);
+    return node;
+  }
+
+  function showTip(html, x, y) {
+    chartTip.innerHTML = html;
+    chartTip.style.display = 'block';
+    const w = chartTip.offsetWidth, h = chartTip.offsetHeight;
+    const left = Math.min(Math.max(8, x - w / 2), window.innerWidth - w - 8);
+    const top = y - h - 12 < 8 ? y + 16 : y - h - 12;
+    chartTip.style.left = left + 'px';
+    chartTip.style.top = top + 'px';
+  }
+
+  function hideTip() {
+    chartTip.style.display = 'none';
+  }
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('.chart')) hideTip(); });
+  window.addEventListener('scroll', hideTip, { passive: true });
+
+  function drawChart(el) {
+    const spec = el._chart;
+    const width = el.clientWidth;
+    if (!spec || !width || width === el._width) return;
+    el._width = width;
+    el.innerHTML = '';
+    const height = spec.height || 140;
+    const svg = svgEl('svg', { width, height, role: 'img', 'aria-label': spec.label || '' }, el);
+    if (spec.kind === 'columns') drawColumns(svg, spec, width, height);
+    else drawLine(svg, spec, width, height);
+  }
+
+  // Y gridlines with money ticks; returns the y-scale.
+  function drawYAxis(svg, max, pad, width, height) {
+    const top = niceCeil(max);
+    const y = v => pad.top + (1 - v / top) * (height - pad.top - pad.bottom);
+    [0, top / 2, top].forEach(v => {
+      svgEl('line', { class: 'grid', x1: pad.left, x2: width - pad.right, y1: y(v), y2: y(v) }, svg);
+      const t = svgEl('text', { class: 'axis-text', x: pad.left - 6, y: y(v) + 3, 'text-anchor': 'end' }, svg);
+      t.textContent = axisMoney(v);
+    });
+    return y;
+  }
+
+  function drawColumns(svg, spec, width, height) {
+    const cols = spec.columns;
+    const pad = { top: 8, right: 4, bottom: 20, left: 48 };
+    const max = Math.max(...cols.map(c => c.value), 0);
+    const y = drawYAxis(svg, max, pad, width, height);
+    const band = (width - pad.left - pad.right) / cols.length;
+    const barW = Math.min(24, band * 0.62);
+    const labelEvery = band < 30 ? 2 : 1;
+    // When labels thin out, keep the current column's (or the last one's) and every other from there.
+    const currentIdx = cols.findIndex(c => c.current);
+    const anchor = currentIdx >= 0 ? currentIdx : cols.length - 1;
+    const baseY = y(0);
+
+    cols.forEach((c, i) => {
+      const cx = pad.left + band * i + band / 2;
+      const h = Math.max(0, baseY - y(c.value));
+      let mark = null;
+      if (h > 0) {
+        // Rounded 4px at the data end, square at the baseline.
+        const r = Math.min(4, h, barW / 2), x0 = cx - barW / 2, x1 = cx + barW / 2, t = baseY - h;
+        mark = svgEl('path', {
+          class: 'col' + (c.faded ? ' faded' : ''),
+          d: `M${x0},${baseY} V${t + r} Q${x0},${t} ${x0 + r},${t} H${x1 - r} Q${x1},${t} ${x1},${t + r} V${baseY} Z`
+        }, svg);
+      }
+      if ((i - anchor) % labelEvery === 0) {
+        const lt = svgEl('text', { class: 'axis-text' + (c.current ? ' current' : ''), x: cx, y: height - 5, 'text-anchor': 'middle' }, svg);
+        lt.textContent = c.label;
+      }
+      // The whole band is the hover/tap target, not just the bar.
+      const hit = svgEl('rect', { class: 'hit', x: pad.left + band * i, y: pad.top, width: band, height: baseY - pad.top }, svg);
+      const show = () => {
+        svg.querySelectorAll('.col.hover').forEach(n => n.classList.remove('hover'));
+        if (mark) mark.classList.add('hover');
+        const rect = svg.getBoundingClientRect();
+        showTip(c.tip, rect.left + cx, rect.top + baseY - h);
+      };
+      hit.addEventListener('pointerenter', show);
+      hit.addEventListener('pointerdown', show);
+      hit.addEventListener('pointerleave', e => {
+        if (e.pointerType !== 'mouse') return;
+        if (mark) mark.classList.remove('hover');
+        hideTip();
+      });
+    });
+  }
+
+  function drawLine(svg, spec, width, height) {
+    const pts = spec.points;
+    const pad = { top: 14, right: 12, bottom: 20, left: 48 };
+    const max = Math.max(spec.target || 0, ...pts.map(p => p.y));
+    const y = drawYAxis(svg, max, pad, width, height);
+    const t0 = +pts[0].x, t1 = Math.max(+new Date(), +pts[pts.length - 1].x);
+    const x = t => pad.left + ((t - t0) / Math.max(1, t1 - t0)) * (width - pad.left - pad.right);
+
+    if (spec.target) {
+      svgEl('line', { class: 'target-line', x1: pad.left, x2: width - pad.right, y1: y(spec.target), y2: y(spec.target) }, svg);
+      const tt = svgEl('text', { class: 'axis-text', x: pad.left + 4, y: y(spec.target) - 4 }, svg);
+      tt.textContent = `Target ${formatMoney(spec.target)}`;
+    }
+
+    // Steps: the total holds flat between deposits, then jumps. Runs on to today.
+    let d = `M${x(+pts[0].x)},${y(pts[0].y)}`;
+    for (let i = 1; i < pts.length; i++) d += ` H${x(+pts[i].x)} V${y(pts[i].y)}`;
+    d += ` H${x(t1)}`;
+    svgEl('path', { class: 'area', d: `${d} V${y(0)} H${x(+pts[0].x)} Z` }, svg);
+    svgEl('path', { class: 'line', d }, svg);
+    const last = pts[pts.length - 1];
+    svgEl('circle', { class: 'dot', cx: x(t1), cy: y(last.y), r: 4 }, svg);
+
+    const xl = svgEl('text', { class: 'axis-text', x: pad.left, y: height - 5 }, svg);
+    xl.textContent = pts[0].x.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+    const xr = svgEl('text', { class: 'axis-text', x: width - pad.right, y: height - 5, 'text-anchor': 'end' }, svg);
+    xr.textContent = 'Today';
+
+    // Crosshair snaps to the nearest deposit.
+    const cross = svgEl('line', { class: 'crosshair', y1: pad.top, y2: y(0), x1: 0, x2: 0, visibility: 'hidden' }, svg);
+    const marker = svgEl('circle', { class: 'dot', r: 4, cx: 0, cy: 0, visibility: 'hidden' }, svg);
+    const hit = svgEl('rect', { class: 'hit', x: pad.left, y: pad.top, width: width - pad.left - pad.right, height: y(0) - pad.top }, svg);
+    const track = ev => {
+      const rect = svg.getBoundingClientRect();
+      const px = ev.clientX - rect.left;
+      let best = pts[0];
+      pts.forEach(p => { if (Math.abs(x(+p.x) - px) < Math.abs(x(+best.x) - px)) best = p; });
+      const bx = x(+best.x), by = y(best.y);
+      cross.setAttribute('x1', bx); cross.setAttribute('x2', bx); cross.setAttribute('visibility', 'visible');
+      marker.setAttribute('cx', bx); marker.setAttribute('cy', by); marker.setAttribute('visibility', 'visible');
+      showTip(best.tip, rect.left + bx, rect.top + by);
+    };
+    hit.addEventListener('pointermove', track);
+    hit.addEventListener('pointerdown', track);
+    hit.addEventListener('pointerleave', e => {
+      if (e.pointerType !== 'mouse') return;
+      cross.setAttribute('visibility', 'hidden');
+      marker.setAttribute('visibility', 'hidden');
+      hideTip();
+    });
+  }
+
   // ---------- Navigation ----------
-  const VIEWS = ['overview', 'goals', 'bills'];
+  const VIEWS = ['overview', 'goals', 'bills', 'budgets'];
 
   function showView() {
     const hashView = location.hash.slice(1);
     const view = VIEWS.includes(hashView) ? hashView : 'overview';
     VIEWS.forEach(v => document.getElementById(v + 'View').classList.toggle('active', v === view));
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+    hideTip();
     window.scrollTo(0, 0);
   }
 
@@ -2012,14 +2990,43 @@
   const authSubmit = document.getElementById('authSubmit');
   const authToggle = document.getElementById('authToggle');
 
+  const authNotice = document.getElementById('authNotice');
+  const authMagic = document.getElementById('authMagic');
+
   function showAuthError(msg) {
+    authNotice.style.display = 'none';
     authError.textContent = msg;
     authError.style.display = 'block';
   }
 
+  // Emails a one-time sign-in link that comes back to this page. On the sign-up side it creates the account too.
+  authMagic.addEventListener('click', async () => {
+    const email = authEmail.value.trim();
+    authError.style.display = 'none';
+    authNotice.style.display = 'none';
+    if (!email) { showAuthError('Enter your email first'); return; }
+    authMagic.disabled = true;
+    try {
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: authMode === 'signup' }
+      });
+      if (error) throw error;
+      authNotice.textContent = `Check ${email} for a sign-in link. Open it on this device and you'll be signed straight in.`;
+      authNotice.style.display = 'block';
+    } catch (e) {
+      showAuthError(/signups? not allowed|not found/i.test(e.message || '')
+        ? 'No account with that email. Sign up first.'
+        : (e.message || 'Something went wrong'));
+    } finally {
+      authMagic.disabled = false;
+    }
+  });
+
   authToggle.addEventListener('click', () => {
     authMode = authMode === 'signin' ? 'signup' : 'signin';
     authError.style.display = 'none';
+    authNotice.style.display = 'none';
     if (authMode === 'signup') {
       authSub.textContent = 'Create an account to start saving.';
       authSubmit.textContent = 'Sign up';
@@ -2064,8 +3071,9 @@
     showView();
     document.getElementById('goalList').innerHTML = '<div class="empty">Loading your goals…</div>';
     document.getElementById('billList').innerHTML = '<div class="empty">Loading your bills…</div>';
+    document.getElementById('budgetList').innerHTML = '<div class="empty">Loading your budgets…</div>';
     document.getElementById('overviewContent').innerHTML = '<div class="empty">Loading…</div>';
-    await Promise.all([loadGoals(), loadBills(), loadPayments(), loadPeriodDeposits()]);
+    await Promise.all([loadGoals(), loadBills(), loadPayments(), loadPeriodDeposits(), loadBudgets(), loadPeriodSpends()]);
     render();
   }
 
@@ -2075,21 +3083,25 @@
     authEmail.value = '';
     authPassword.value = '';
     authError.style.display = 'none';
+    authNotice.style.display = 'none';
     goals = [];
     bills = [];
     payments = [];
     periodDeposits = [];
+    budgets = [];
+    periodSpends = [];
   }
 
+  // Supabase reports INITIAL_SESSION on load and SIGNED_IN / SIGNED_OUT after, but also TOKEN_REFRESHED
+  // about hourly and SIGNED_IN again whenever the tab regains focus. Only a change of user should reload.
+  let signedInUserId = null;
   sb.auth.onAuthStateChange((event, session) => {
-    if (session) { enterApp(); } else { showAuthScreen(); }
+    const userId = session ? session.user.id : null;
+    if (event !== 'INITIAL_SESSION' && userId === signedInUserId) return;
+    signedInUserId = userId;
+    // Supabase calls made inside this callback can deadlock its auth lock, so load on the next tick.
+    setTimeout(() => { if (userId) enterApp(); else showAuthScreen(); }, 0);
   });
-
-  async function init() {
-    const { data: { session } } = await sb.auth.getSession();
-    if (session) { await enterApp(); } else { showAuthScreen(); }
-  }
-  init();
 })();
 </script>
 
