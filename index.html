@@ -732,9 +732,9 @@
       <input id="budgetNameInput" type="text" placeholder="e.g. Groceries" maxlength="40">
     </div>
     <div class="field">
-      <label for="budgetAmountInput">Each month</label>
+      <label for="budgetAmountInput">Amount per month</label>
       <input id="budgetAmountInput" type="number" inputmode="decimal" placeholder="0" min="0" step="0.01">
-      <div class="field-hint">Resets every payday. It comes off "Free to spend" on the Overview.</div>
+      <div class="field-hint">Repeats every month until you archive it. Each payday you start again with the full amount. It comes off "Free to spend" on the Overview.</div>
     </div>
     <div class="sheet-actions">
       <button class="btn-cancel" id="cancelBudget">Cancel</button>
@@ -2577,7 +2577,7 @@
           <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
           <div class="suggestion-line">${line}</div>
           <div class="goal-foot">
-            <div class="goal-amounts"><span class="saved">${formatMoney(use.spent)}</span> of ${formatMoney(b.amount)}</div>
+            <div class="goal-amounts"><span class="saved">${formatMoney(use.spent)}</span> of ${formatMoney(b.amount)} this month</div>
             <div class="goal-actions">
               <button class="btn-small spend-history" data-id="${b.id}">History</button>
               <button class="btn-small add-spend" data-id="${b.id}">+ Spend</button>

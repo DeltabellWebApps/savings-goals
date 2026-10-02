@@ -161,16 +161,19 @@
   function projectGoal(goal, plan, period) {
     const today = startOfToday();
 
-    // With a deadline: compare against a steady line from the day the goal was made to the target date,
-    // measured at the end of this pay period (so a goal saved up for this month reads as on schedule).
+    // With a deadline: compare where the goal stood when this pay period began against a steady line from
+    // the day it was made to the target date. Using the start of the period means this month's saving (or
+    // not having done it yet) doesn't move it; only earlier months falling short or getting ahead do.
+    // Gaps under half a month's share count as on schedule.
     if (goal.targetDate) {
       const created = goal.createdAt ? new Date(goal.createdAt) : null;
       const due = parseLocalDate(goal.targetDate);
       if (!created || due <= created) return null;
-      const at = Math.min(+period.end, +due);
-      const expected = goal.target * Math.min(1, Math.max(0, (at - created) / (due - created)));
-      const diff = goal.saved - expected;
-      if (Math.abs(diff) < Math.max(1, goal.target * 0.01)) return { text: 'On schedule', tone: 'good' };
+      const expected = goal.target * Math.min(1, Math.max(0, (period.start - created) / (due - created)));
+      const savedAtStart = goal.saved - plan.savedThisPeriod;
+      const diff = savedAtStart - expected;
+      const monthlyShare = goal.target / Math.max(1, (due - created) / AVG_MONTH_MS);
+      if (Math.abs(diff) < Math.max(1, monthlyShare / 2)) return { text: 'On schedule', tone: 'good' };
       return diff > 0
         ? { text: `${formatMoney(diff)} ahead of schedule`, tone: 'good' }
         : { text: `${formatMoney(-diff)} behind schedule`, tone: 'behind' };
